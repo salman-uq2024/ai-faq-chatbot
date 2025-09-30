@@ -14,7 +14,7 @@ const sellingPoints = [
   },
   {
     title: "No-Key Demo",
-    description: "Run a local TF-IDF fallback when keys are missing, or drop in OpenAI keys for production quality.",
+    description: "Run a local TF-IDF fallback when keys are missing, or drop in Gemini keys for production quality.",
   },
 ];
 
@@ -63,7 +63,7 @@ export default async function Home() {
               Launch a branded AI assistant for your docs in minutes.
             </h1>
             <p className="max-w-xl text-lg text-slate-600">
-              Ingest documentation, FAQs, or PDFs, then answer customer questions with grounded, citeable responses. Works with OpenAI or in offline demo mode without keys.
+              Ingest documentation, FAQs, or PDFs, then answer customer questions with grounded, citeable responses. Works with Gemini or in offline demo mode without keys.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
@@ -124,7 +124,7 @@ export default async function Home() {
             <ul className="space-y-2 text-sm text-slate-600">
               <li>- Rate limiting and origin allowlist controls ship by default.</li>
               <li>- Server-only environment variables keep API keys off the client.</li>
-              <li>- Works with or without OpenAI credentials so anyone can demo locally.</li>
+              <li>- Works with or without Gemini credentials so anyone can demo locally.</li>
             </ul>
           </div>
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">

@@ -8,8 +8,8 @@ A production-ready Next.js application for ingesting product documentation, runn
 ## Features
 
 - **Multi-source ingestion** – Crawl websites (depth-limited) and fetch PDFs, clean the text, chunk, embed, and persist locally.
-- **Hybrid embeddings** – Uses OpenAI embeddings when a key is present, otherwise falls back to a deterministic hashed embedding for offline demos.
-- **Secure RAG API** – `/api/query` performs similarity search, cites top sources, and calls OpenAI Responses API when available. Falls back to stitched summaries when offline.
+- **Hybrid embeddings** – Taps Gemini embeddings when a key is present, otherwise falls back to a deterministic hashed embedding for offline demos.
+- **Secure RAG API** – `/api/query` performs similarity search, cites top sources, and calls Gemini for grounded answers when available. Falls back to stitched summaries when offline.
 - **Admin console** – Configure models, token limits, brand colour, and origin allowlist. Kick off ingestion jobs, monitor recent runs, and copy embed snippets.
 - **Embeddable widget** – `/widget.js` injects a floating button and modal that talks to the hosted API from any allowlisted domain.
 - **Safety rails** – Per-origin/IP rate limiting, strict origin allowlist enforcement, server-only access to secrets.
@@ -40,8 +40,8 @@ npm run dev
 Copy `.env.example` to `.env.local` and adjust as needed:
 
 ```ini
-OPENAI_API_KEY=sk-...
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+GEMINI_API_KEY=your-api-key
+GEMINI_EMBEDDING_MODEL=models/embedding-001
 RATE_LIMIT_PER_MINUTE=30
 ```
 
@@ -90,12 +90,12 @@ Response body:
 }
 ```
 
-- When `OPENAI_API_KEY` is present, answers come from the OpenAI Responses API with grounded prompts.
+- When `GEMINI_API_KEY` is present, answers come from Gemini with grounded prompts.
 - Without a key, answers stitch together the highest-scoring chunks so `/api/query` always responds.
 
 ## Admin Settings
 
-- **Model ID** – Defaults to `gpt-4o-mini`. Enter any Responses-compatible model.
+- **Model ID** – Defaults to `models/gemini-1.5-flash`. Enter any Gemini text model name.
 - **Max output tokens** – Clamped between 64 and 4096.
 - **Brand colour** – Controls admin accents and widget styling.
 - **Origin allowlist** – Domains allowed to call the API/widget (`http://localhost:3000`, `http://127.0.0.1:3100`, etc. seeded by default).
@@ -143,7 +143,7 @@ Vercel will run `npm install`, `npm run build`, and host the serverless routes (
 
 ## Troubleshooting
 
-- **OpenAI key missing** – The app falls back gracefully, but you’ll see console warnings when the API is not configured.
+- **Gemini key missing** – The app falls back gracefully, but you’ll see console warnings when the API is not configured.
 - **Rate limit hits** – Increase `RATE_LIMIT_PER_MINUTE` or widen the origin allowlist.
 - **Large ingests** – Default max pages is 10 (configurable to 25). Consider adding a queue or external vector store if you need scale.
 

@@ -58,7 +58,7 @@ type IngestionLogShape = {
 };
 
 const defaultSettings: AppSettings = {
-  model: "gpt-4o-mini",
+  model: "models/gemini-1.5-flash",
   maxTokens: 512,
   brandColor: "#2563EB",
   allowOrigins: [
@@ -66,6 +66,8 @@ const defaultSettings: AppSettings = {
     "http://127.0.0.1:3000",
     "http://localhost:3100",
     "http://127.0.0.1:3100",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
   ],
 };
 

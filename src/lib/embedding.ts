@@ -1,20 +1,44 @@
 import { createHash } from "crypto";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const EMBEDDING_DIMENSION = 256;
+const FALLBACK_EMBEDDING_DIMENSION = 768;
 
-let openAIClient: OpenAI | null = null;
+let geminiClient: GoogleGenerativeAI | null = null;
 
-function getOpenAIClient(): OpenAI | null {
-  if (!process.env.OPENAI_API_KEY) {
+function getGeminiClient(): GoogleGenerativeAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
     return null;
   }
 
-  if (!openAIClient) {
-    openAIClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!geminiClient) {
+    geminiClient = new GoogleGenerativeAI(apiKey);
   }
 
-  return openAIClient;
+  return geminiClient;
+}
+
+async function embedWithGemini(texts: string[], client: GoogleGenerativeAI): Promise<number[][] | null> {
+  try {
+    const modelName = process.env.GEMINI_EMBEDDING_MODEL ?? "models/embedding-001";
+    const model = client.getGenerativeModel({ model: modelName });
+    const response = await model.batchEmbedContents({
+      requests: texts.map((text) => ({
+        content: {
+          role: "user",
+          parts: [{ text }],
+        },
+      })),
+    });
+    const embeddings = response.embeddings ?? [];
+    if (!embeddings?.length) {
+      return null;
+    }
+    return embeddings.map((item) => item.values);
+  } catch (error) {
+    console.error("Embedding request failed, using fallback", error);
+    return null;
+  }
 }
 
 function hashWord(word: string): number {
@@ -23,7 +47,7 @@ function hashWord(word: string): number {
 }
 
 function fallbackEmbedding(text: string): number[] {
-  const vector = new Array<number>(EMBEDDING_DIMENSION).fill(0);
+  const vector = new Array<number>(FALLBACK_EMBEDDING_DIMENSION).fill(0);
   const words = text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
@@ -31,7 +55,7 @@ function fallbackEmbedding(text: string): number[] {
     .filter(Boolean);
 
   for (const word of words) {
-    const index = hashWord(word) % EMBEDDING_DIMENSION;
+    const index = hashWord(word) % FALLBACK_EMBEDDING_DIMENSION;
     vector[index] += 1;
   }
 
@@ -43,23 +67,16 @@ function fallbackEmbedding(text: string): number[] {
 }
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
-  const client = getOpenAIClient();
+  const client = getGeminiClient();
 
-  if (!client) {
-    return texts.map((text) => fallbackEmbedding(text));
+  if (client) {
+    const embeddings = await embedWithGemini(texts, client);
+    if (embeddings) {
+      return embeddings;
+    }
   }
 
-  try {
-    const response = await client.embeddings.create({
-      model: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
-      input: texts,
-    });
-
-    return response.data.map((item) => item.embedding);
-  } catch (error) {
-    console.error("Embedding request failed, using fallback", error);
-    return texts.map((text) => fallbackEmbedding(text));
-  }
+  return texts.map((text) => fallbackEmbedding(text));
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {

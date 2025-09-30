@@ -53,7 +53,7 @@ export default function AdminPage() {
   const [ingesting, setIngesting] = useState(false);
   const [ingestMessage, setIngestMessage] = useState<string | null>(null);
   const [ingestError, setIngestError] = useState<string | null>(null);
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [model, setModel] = useState("models/gemini-1.5-flash");
   const [maxTokens, setMaxTokens] = useState(512);
   const [brandColor, setBrandColor] = useState("#2563EB");
   const [allowOrigins, setAllowOrigins] = useState("http://localhost:3000");

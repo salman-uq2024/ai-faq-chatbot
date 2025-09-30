@@ -87,7 +87,7 @@ export async function GET() {
       '.ai-faq-sources ul {',
       '  padding-left: 18px;',
       '}',
-    ].join('\n');
+    ].join(String.fromCharCode(10));
     document.head.appendChild(style);
 
     const button = document.createElement('button');
