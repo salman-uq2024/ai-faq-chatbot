@@ -1,74 +1,115 @@
 # Installation Guide
 
-Follow these steps to set up the AI FAQ Chatbot locally.
+Follow these step-by-step instructions to set up the AI FAQ Chatbot locally. This guide assumes you are a beginner and provides all necessary details for a smooth setup.
 
 ## Prerequisites
 
-- Node.js 20.x or 22.x (LTS)
-- npm 10+
-- (Optional) Google Gemini API key for cloud answers
+Before starting, ensure you have the following installed:
 
-## 1. Clone and Install
+- Node.js version 18 or higher (recommended: 20.x or 22.x LTS). Download from [nodejs.org](https://nodejs.org/).
+- npm (comes with Node.js) or yarn as your package manager.
+- Git for cloning the repository. Install from [git-scm.com](https://git-scm.com/).
+- A Google Gemini API key (optional but recommended for AI embeddings and responses). Get one from [Google AI Studio](https://aistudio.google.com/app/apikey). For production, consider a managed vector database like Supabase or Pinecone for storage (see [src/lib/storage.ts](src/lib/storage.ts) for integration points).
+- Optional: An account for a vector store if replacing the default JSON-based storage.
 
+Verify installations:
 ```bash
-git clone https://github.com/PROJECT_NAME/ai-faq-chatbot.git
-cd ai-faq-chatbot
-npm install
+node --version
+npm --version
+git --version
 ```
 
-## 2. Configure Environment
+## Step 1: Clone the Repository
 
-Copy the example configuration and fill in values as needed:
+Clone the project from GitHub:
+```bash
+git clone https://github.com/[your-username]/ai-faq-chatbot.git
+cd ai-faq-chatbot
+```
 
+Replace `[your-username]` with the actual GitHub username or fork the repository if needed.
+
+## Step 2: Install Dependencies
+
+Install the required packages:
+```bash
+npm install
+```
+(Or `yarn install` if using Yarn.)
+
+This sets up Next.js, TypeScript, and other dependencies listed in [package.json](package.json).
+
+## Step 3: Configure Environment Variables
+
+Create a local environment file by copying the example:
 ```bash
 cp .env.example .env.local
 ```
 
-Populate `.env.local` with:
+Edit `.env.local` with your values. Key variables include:
 
-```ini
-GEMINI_API_KEY=your-api-key
+- `GEMINI_API_KEY=your-gemini-api-key-here`: Required for AI embeddings and query responses using Google Gemini. Without this, the app falls back to basic snippet matching (see [src/lib/embedding.ts](src/lib/embedding.ts) for details).
+- `GEMINI_EMBEDDING_MODEL=models/embedding-001`: The Gemini model for generating embeddings (default if unset).
+- `STORAGE_URL=your-storage-endpoint`: Optional URL for a managed store like Supabase or Pinecone. Defaults to local JSON files in `data/` (ephemeral on platforms like Vercel).
+- `RATE_LIMIT_PER_MINUTE=30`: Limits queries per minute to prevent abuse (configurable in [src/lib/security.ts](src/lib/security.ts)).
+
+Example `.env.local`:
+```
+GEMINI_API_KEY=AIzaSy...your-key
 GEMINI_EMBEDDING_MODEL=models/embedding-001
+STORAGE_URL=https://your-supabase-url.supabase.co
 RATE_LIMIT_PER_MINUTE=30
 ```
 
-All variables are optional. Without a Gemini key the app runs in fallback mode and still answers using stored snippets.
+For more variables, refer to the code in [src/lib/types.ts](src/lib/types.ts).
 
-## 3. Start the Dev Server
+## Step 4: Start the Development Server
 
+Run the app in development mode:
 ```bash
 npm run dev
 ```
 
-Navigate to `http://localhost:3000` for the public widget preview and `http://localhost:3000/admin` for the admin dashboard.
+The server starts at `http://localhost:3000`. 
+- Visit `http://localhost:3000` for the landing page and widget demo.
+- Access `http://localhost:3000/admin` for the admin dashboard to ingest content.
 
-## 4. Ingest Content
+## Step 5: Ingest Initial Content
 
-From the admin dashboard:
+In the admin dashboard:
+1. Enter a base URL (e.g., your FAQ site) or PDF URLs.
+2. Set crawl depth (default: 2) and limits.
+3. Click "Start Ingestion". Monitor the progress toast.
 
-1. Enter a base URL or list of PDF URLs.
-2. Adjust crawl depth and limits as desired.
-3. Click **Start ingestion** and wait for the confirmation toast.
+This processes content using the RAG pipeline (see [src/lib/ingest/pipeline.ts](src/lib/ingest/pipeline.ts) and [src/lib/rag.ts](src/lib/rag.ts)).
 
-Existing chunks from the same origin are replaced, keeping responses fresh.
+## Step 6: Test the Setup
 
-## 5. Verify Queries
-
-Use either the embedded widget or call the API directly:
-
+Query the chatbot:
+- Embed the widget on a test page or visit `/widget.js`.
+- Or use curl:
 ```bash
 curl -X POST http://localhost:3000/api/query \
   -H 'Content-Type: application/json' \
-  -d '{"question":"How do I embed the widget?"}'
+  -d '{"question": "What is RAG?"}'
 ```
 
-If a Gemini key is configured the answer comes from the LLM; otherwise the fallback summariser responds using the stored snippets.
-
-## 6. Run Tests
-
+Run tests to verify:
 ```bash
 npm run lint
 npm run test:e2e
 ```
 
-Playwright installs browsers on first run and performs a smoke test against the running dev server.
+For a quick start overview, see the [README.md](README.md).
+
+## Troubleshooting
+
+- **npm install fails**: Delete `node_modules` and `package-lock.json`, then retry `npm install`. Ensure Node.js is >=18.
+- **Port 3000 in use**: Kill the process with `lsof -ti:3000 | xargs kill -9`, or change the port in `package.json` scripts (e.g., `npm run dev -- -p 3001`).
+- **Missing TypeScript types**: Run `npm install @types/node --save-dev` and restart the dev server.
+- **Ingestion errors**: Check console logs for API key issues. Verify URL accessibility and robots.txt (see [src/lib/ingest/crawl.ts](src/lib/ingest/crawl.ts)).
+- **No responses**: Ensure content is ingested and Gemini key is set. Fallback mode uses stored snippets only.
+
+If issues persist, check the [ops.md](docs/ops.md) for advanced debugging.
+
+(Word count: ~285)

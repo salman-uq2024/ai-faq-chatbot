@@ -1,66 +1,76 @@
 # Operations Guide
 
-## Runtime Overview
+This guide covers running the AI FAQ Chatbot in production, monitoring, scaling, and maintenance. It's designed for beginners managing the app post-deployment. For setup and deployment, refer to [install.md](docs/install.md) and [deploy.md](docs/deploy.md).
 
-- **Framework**: Next.js App Router
-- **Runtime Commands**:
-  - `npm run dev` – local development server
-  - `npm run start` – production server after `npm run build`
-- **Storage**: JSON files under `data/` (replace with managed store in production if durability is required)
+## Runtime in Production
+
+The app uses Next.js App Router for server-side rendering and API routes.
+
+- **Start Command**: After building (`npm run build`), run `npm run start` to serve on port 3000 (or as configured).
+- **Environment**: Set `NODE_ENV=production` for optimized builds. Use serverless platforms like Vercel for auto-scaling.
+- **Storage**: Defaults to JSON files in `data/` (ephemeral). For persistence, configure a backend like Supabase or Pinecone via `STORAGE_URL` env var (see [src/lib/storage.ts](src/lib/storage.ts)).
+
+Key files:
+- API routes: [src/app/api/query/route.ts](src/app/api/query/route.ts) for queries, [src/app/api/admin/ingest/route.ts](src/app/api/admin/ingest/route.ts) for ingestion.
+- RAG pipeline: [src/lib/rag.ts](src/lib/rag.ts).
 
 ## Environment Variables
 
-| Variable | Purpose | Notes |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | Enables Gemini-generated answers | Leave unset for fallback mode |
-| `GEMINI_EMBEDDING_MODEL` | Embedding model identifier | Defaults to `models/embedding-001` |
-| `RATE_LIMIT_PER_MINUTE` | Per-origin/IP limit for `/api/query` | Default 30 requests |
+Configure these in your hosting platform (e.g., Vercel dashboard):
 
-Changes require a server restart to take effect.
+| Variable                  | Purpose                              | Example/Default                  |
+|---------------------------|--------------------------------------|----------------------------------|
+| `GEMINI_API_KEY`         | Enables AI embeddings and responses | `AIzaSy...` (required for full features) |
+| `GEMINI_EMBEDDING_MODEL` | Model for text embeddings            | `models/embedding-001`           |
+| `STORAGE_URL`             | Vector store endpoint                | `https://your-supabase-url` (optional) |
+| `RATE_LIMIT_PER_MINUTE`  | Query rate limit per IP/origin       | `60` (higher for prod)           |
+
+Changes require redeployment. Without `GEMINI_API_KEY`, fallback to snippet-based responses.
 
 ## Ingestion Jobs
 
-Ingestion runs synchronously from the admin UI or `POST /api/admin/ingest`. Each job:
+Ingestion processes content (web crawls/PDFs) into vectors for RAG.
 
-1. Crawls the requested origin (up to 25 pages) and/or downloads PDFs.
-2. Normalises and chunks text.
-3. Embeds each chunk (Gemini if available, hashed fallback otherwise).
-4. Replaces existing chunks that share the same origin.
-5. Stores a log entry at `data/ingestion-log.json`.
+- **How it Works**:
+  1. Trigger via admin dashboard (`/admin`) or POST to `/api/admin/ingest`.
+  2. Crawl URLs ([src/lib/ingest/crawl.ts](src/lib/ingest/crawl.ts)) or parse PDFs ([src/lib/ingest/pdf.ts](src/lib/ingest/pdf.ts)).
+  3. Chunk text ([src/lib/text.ts](src/lib/text.ts)), embed ([src/lib/embedding.ts](src/lib/embedding.ts)), store.
+  4. Logs saved to `/api/admin/ingestion-log` endpoint.
 
-Monitor the “Recent ingestions” card in `/admin` to verify success. Errors return in the UI and API response body.
+- **Tips**:
+  - Batch PDF processing: Limit concurrent files in [src/lib/ingest/pdf.ts](src/lib/ingest/pdf.ts) to avoid memory issues.
+  - Handle rate limits: Gemini calls in [src/lib/embedding.ts](src/lib/embedding.ts) include retries; monitor API quotas.
+  - For large datasets, scale by queuing jobs (e.g., Vercel Cron) or using external services.
 
-## Query Handling
+View recent jobs in admin dashboard.
 
-- All widget/API calls hit `src/app/api/query/route.ts`.
-- Origin allowlist is enforced via `data/settings.json`.
-- Rate limiting is in `src/lib/security.ts`; adjust via environment variable.
-- Without Gemini the fallback summariser stitches relevant sentences from retrieved chunks.
+## Query Handling and Monitoring
+
+- **Queries**: Handled in [src/app/api/query/route.ts](src/app/api/query/route.ts). Enforces origin allowlist ([src/lib/security.ts](src/lib/security.ts)) and rate limits.
+- **Monitoring**:
+  - Logs: Console output for errors (view in Vercel dashboard or server logs). Add Sentry for advanced error tracking (integrate via `npm install @sentry/nextjs` and config in [next.config.ts](next.config.ts)).
+  - Metrics: Track ingestion success via `/api/admin/ingestion-log`. Use browser dev tools for frontend issues.
+  - Performance: Queries use vector similarity; slow responses indicate unoptimized storage.
+
+For scaling queries, leverage serverless auto-scaling. Externalize storage for high concurrency.
 
 ## Maintenance Tasks
 
-| Task | Frequency | Command/Action |
-| --- | --- | --- |
-| Update dependencies | Monthly | `npm outdated`, `npm update` |
-| Run quality gates | Before releases | `npm run lint && npm run test:e2e && npm run build` |
-| Rotate API keys | Quarterly | Update Vercel env vars and redeploy |
-| Backup knowledge base | As needed | Copy `data/chunks.json` / move to managed DB |
+Perform these regularly to keep the app healthy:
 
-## Observability
+1. **Update Dependencies**: Monthly – Run `npm outdated` to check, then `npm update` and test.
+2. **Run Tests and Build**: Before every deploy – `npm run lint && npm run test:e2e && npm run build`. Ensures no breaking changes.
+3. **Backup Data**: Copy `data/chunks.json` or export from storage backend.
+4. **Rotate Secrets**: Quarterly – Update API keys in env vars and redeploy.
+5. **Optimize**: Review embeddings for large corpora; consider vector index tweaks in storage setup.
 
-- Server logs: standard output (Vercel dashboard or platform logs).
-- API errors: logged via `console.error` with stack traces.
-- Frontend issues: use browser dev tools; widget logs to console on failure.
+## Troubleshooting
 
-## Incident Response
+- **Slow Queries**: Optimize vector index in your storage (e.g., Supabase pgvector). Reduce chunk size in [src/lib/ingest/pipeline.ts](src/lib/ingest/pipeline.ts). Check [src/lib/rag.ts](src/lib/rag.ts) for retrieval limits.
+- **Security Issues**: Review allowlist and auth in [src/lib/security.ts](src/lib/security.ts). Ensure HTTPS in production.
+- **Ingestion Failures**: Logs at `/api/admin/ingestion-log`. Common causes: Invalid URLs, robots.txt blocks, or API rate limits. Verify env vars.
+- **Rate Limit Exceeded**: Increase `RATE_LIMIT_PER_MINUTE` or whitelist IPs in [src/lib/security.ts](src/lib/security.ts).
+- **Storage Errors**: If using JSON, data may reset on restarts. Switch to persistent backend via [src/lib/storage.ts](src/lib/storage.ts).
+- **No Responses**: Confirm ingestion completed and Gemini key is valid. Test fallback mode.
 
-1. Check logs for rate-limit or origin errors (403/429).
-2. Verify `allowOrigins` in `/admin` and `data/settings.json`.
-3. Confirm environment variables exist and have correct values.
-4. If ingestion fails, inspect the error toast and check remote robots.txt restrictions.
-
-## Scaling Notes
-
-- Stateless compute; horizontal scaling requires externalising the JSON storage.
-- Replace `embedTexts` backend with managed vector DB for large datasets.
-- Consider queueing ingestion jobs for larger crawls.
+For deployment-specific issues, see [deploy.md](docs/deploy.md). If adding Sentry, follow their Next.js guide for setup.

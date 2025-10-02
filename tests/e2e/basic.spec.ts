@@ -22,3 +22,8 @@ test("widget loader is served", async ({ request }) => {
   const text = await response.text();
   expect(text).toContain("__aiFaqWidgetLoaded");
 });
+
+test("demo page renders", async ({ page }) => {
+  await page.goto("/demo");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Demo the AI FAQ Chatbot");
+});
