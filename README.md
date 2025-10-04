@@ -3,10 +3,10 @@
 [![GitHub stars](https://img.shields.io/github/stars/salman/ai-faq-chatbot?style=social)](https://github.com/salman/ai-faq-chatbot)
 [![GitHub forks](https://img.shields.io/github/forks/salman/ai-faq-chatbot?style=social)](https://github.com/salman/ai-faq-chatbot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/salman/ai-faq-chatbot/blob/main/LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat&logo=next.js)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat&logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat&logo=typescript)](https://www.typescriptlang.org)
-[![React](https://img.shields.io/badge/React-18-green?style=flat&logo=react)](https://react.dev)
-[![OpenAI](https://img.shields.io/badge/OpenAI-API-orange?style=flat&logo=openai)](https://openai.com)
+[![React](https://img.shields.io/badge/React-19-green?style=flat&logo=react)](https://react.dev)
+[![Gemini](https://img.shields.io/badge/Google%20Gemini-API-4285F4?style=flat&logo=google)](https://ai.google.dev/)
 
 AI-Powered FAQ Chatbot: Ingest documents via RAG, query intelligently, with admin dashboard and embeddable widget.
 
@@ -30,16 +30,16 @@ AI-Powered FAQ Chatbot: Ingest documents via RAG, query intelligently, with admi
 - **Intelligent querying**: Use embeddings and Retrieval-Augmented Generation (RAG) for accurate, context-aware responses.
 - **Admin panel**: Manage ingestion, view logs, and configure settings via an intuitive dashboard.
 - **Embeddable JavaScript widget**: Easily integrate the chatbot into any website with a lightweight script.
-- **Production-ready**: Built with TypeScript, shadcn/ui components, and Playwright end-to-end tests for reliability.
+- **Production-ready**: Built with TypeScript, Tailwind CSS, and Playwright end-to-end tests for reliability.
 
 ## Tech Stack
 
-- [Next.js](https://nextjs.org) (App Router, Server Actions)
-- [React](https://react.dev) with [shadcn/ui](https://ui.shadcn.com)
+- [Next.js](https://nextjs.org) (App Router)
+- [React](https://react.dev) 19 with [SWR](https://swr.vercel.app)
 - [TypeScript](https://www.typescriptlang.org) for type safety
 - [Tailwind CSS](https://tailwindcss.com) for styling
-- [OpenAI Embeddings](https://platform.openai.com/docs/guides/embeddings) for vector representations
-- In-memory vector storage with plans for scalable options like Pinecone
+- [Google Gemini API](https://ai.google.dev/) for embeddings and grounded responses (with offline fallback vectors)
+- File-based vector storage configurable via `STORAGE_DIR`, ready to swap for hosted options
 
 ## Quick Start
 
@@ -60,10 +60,12 @@ npm install
 
 Copy `.env.example` to `.env.local` and configure:
 
-- `OPENAI_API_KEY`: Your OpenAI API key for embeddings and generation.
-- Other vars: See `.env.example` for rate limiting, etc.
+- `GEMINI_API_KEY`: Google Gemini API key used for embeddings and responses. Without it the app falls back to offline TF-IDF answers.
+- `ADMIN_TOKEN`: Optional bearer token that locks down `/admin` APIs in production.
+- `STORAGE_DIR`: Optional path override for chunk storage (set to `/tmp/data` on serverless hosts like Vercel).
+- `RATE_LIMIT_PER_MINUTE`: Override the default per-origin rate limit.
 
-For demo mode without keys, the app uses mock responses.
+For demo mode without keys, the app uses hashed TF-IDF style vectors to return stored snippets.
 
 ### Run Locally
 
@@ -79,16 +81,18 @@ For full installation details, see [docs/install.md](docs/install.md).
 
 **Live Demo**: [TBD - Deployed on Vercel](https://ai-faq-chatbot.vercel.app)
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/salman/ai-faq-chatbot&env=GEMINI_API_KEY,ADMIN_TOKEN,RATE_LIMIT_PER_MINUTE,STORAGE_DIR&envDescription=Set%20required%20environment%20variables%20for%20production%20usage.)
+
 ### Embed the Widget
 
 Add this script to your website's `<head>` or `<body>`:
 
 ```html
-<script src="https://yourdomain.com/widget.js" 
-        data-api-url="https://yourdomain.com/api/query" 
-        data-origin="yourdomain.com">
-</script>
-<div id="chatbot-widget"></div>
+<script src="https://yourdomain.com/widget.js"
+        data-api-url="https://yourdomain.com/api/query"
+        data-button-text="Need help?"
+        data-brand-color="#2563EB"
+        async></script>
 ```
 
 Customize via admin settings for branding and behavior.
@@ -101,18 +105,12 @@ Customize via admin settings for branding and behavior.
 ### Admin Dashboard
 ![Admin Demo](public/demo-admin.png)
 
-### Query Flow
-![Query Flow](public/demo-query.png) <!-- Placeholder: Generate if needed via scripts/generate-demo-images.mjs -->
-
-### Widget Embed
-![Widget Embed](public/demo-widget.png) <!-- Placeholder: Generate if needed -->
-
 ## How It Works
 
 The chatbot uses a Retrieval-Augmented Generation (RAG) pipeline:
 
-1. **Ingestion**: Parse PDFs or crawl web pages, chunk text, generate embeddings with OpenAI, and store vectors locally (or in a DB).
-2. **Querying**: Embed user questions, retrieve relevant chunks via similarity search, augment prompts, and generate responses with citations.
+1. **Ingestion**: Parse PDFs or crawl web pages, chunk text, generate embeddings with Google Gemini (or fallback vectors offline), and store them locally or in your data store.
+2. **Querying**: Embed user questions, retrieve relevant chunks via cosine similarity, augment prompts, and generate responses with citations.
 
 For implementation details, explore [src/lib](src/lib) (e.g., [embedding.ts](src/lib/embedding.ts), [rag.ts](src/lib/rag.ts)).
 
@@ -122,7 +120,11 @@ Deploy seamlessly to Vercel with one click:
 
 1. Push to GitHub.
 2. Connect to Vercel and import the repo.
-3. Add environment variables (e.g., `OPENAI_API_KEY`).
+3. Add environment variables:
+   - `GEMINI_API_KEY`
+   - `ADMIN_TOKEN` (recommended for production dashboards)
+   - `STORAGE_DIR=/tmp/data` (required on serverless platforms)
+   - `RATE_LIMIT_PER_MINUTE`
 4. Deploy – automatic builds and optimizations included.
 
 For advanced setup, see [docs/deploy.md](docs/deploy.md).
@@ -132,7 +134,7 @@ For advanced setup, see [docs/deploy.md](docs/deploy.md).
 Contributions are welcome! Please:
 
 - Fork the repo and create a feature branch.
-- Run `npm run lint` and `npm run test:e2e` before submitting.
+- Run `npm run lint`, `npm run typecheck`, and `npm run test:e2e` before submitting.
 - Open a PR with a clear description.
 
 For operations and FAQs, refer to [docs/ops.md](docs/ops.md).

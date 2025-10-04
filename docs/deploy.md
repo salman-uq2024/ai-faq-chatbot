@@ -8,7 +8,7 @@ This guide provides step-by-step instructions for deploying the AI FAQ Chatbot t
 - Vercel account (free tier works for starters). Sign up at [vercel.com](https://vercel.com).
 - Google Gemini API key for production AI features (optional; get from [Google AI Studio](https://aistudio.google.com/app/apikey)).
 - Optional: Accounts for alternative hosts like Netlify or Docker for self-hosting.
-- Persistent storage setup if needed (e.g., Supabase or Pinecone for vector data; integrate via [src/lib/storage.ts](src/lib/storage.ts)).
+- Persistent storage setup if needed (e.g., mounted volume or managed vector DB). Use `STORAGE_DIR` to pick a writable location or extend [src/lib/storage.ts](../src/lib/storage.ts) to plug in an external store.
 
 Verify GitHub repo is public or accessible.
 
@@ -37,7 +37,8 @@ Vercel offers serverless deployment, automatic scaling, and easy env var managem
 4. In **Environment Variables**, add the same vars as local (from `.env.local`):
    - `GEMINI_API_KEY=your-production-api-key`: For secure AI queries and embeddings.
    - `GEMINI_EMBEDDING_MODEL=models/embedding-001`: Model for vector embeddings.
-   - `STORAGE_URL=your-production-storage-url`: For persistent data (e.g., Supabase endpoint).
+   - `ADMIN_TOKEN=generate-a-strong-token`: Protects `/admin` APIs. Paste this token into the dashboard when prompted.
+   - `STORAGE_DIR=/tmp/data`: Required on Vercel/Netlify so chunk files persist for the lifetime of the function.
    - `RATE_LIMIT_PER_MINUTE=60`: Higher limit for production (adjust as needed).
    Add any production secrets, like database URLs.
 5. Click **Deploy**. Vercel builds and deploys; you'll get a live URL (e.g., `your-app.vercel.app`).
@@ -98,15 +99,15 @@ For monitoring and operations, see [ops.md](docs/ops.md).
 ## Scaling Notes
 
 - Vercel/Netlify use serverless functions for API routes (`/api/query`, `/api/admin/*`), auto-scaling queries without manual config.
-- For high traffic, externalize storage to avoid ephemeral file limits (update [src/lib/storage.ts](src/lib/storage.ts)).
+- For high traffic, externalize storage to avoid ephemeral file limits (update [src/lib/storage.ts](../src/lib/storage.ts)).
 - Ingestion jobs run on-demand; for large-scale, queue them (e.g., via Vercel Cron).
 
 ## Troubleshooting
 
 - **Build fails**: Check [next.config.ts](next.config.ts) for image domains or plugins. Ensure all deps are in [package.json](package.json). Run `npm run build` locally to debug.
 - **API routes return 404**: Confirm App Router setup in `src/app/api/` directories. Redeploy after fixes.
-- **Ingestion errors**: Verify storage connection in [src/lib/storage.ts](src/lib/storage.ts) and env vars. Check for rate limits in Gemini API.
+- **Ingestion errors**: Verify storage connection in [src/lib/storage.ts](../src/lib/storage.ts) and env vars. Check for rate limits in Gemini API.
 - **Env vars not loading**: In Vercel, ensure vars are set for "Production" environment and redeploy.
-- **Slow queries**: Optimize embeddings in [src/lib/embedding.ts](src/lib/embedding.ts); consider vector DB for faster retrieval.
+- **Slow queries**: Optimize embeddings in [src/lib/embedding.ts](../src/lib/embedding.ts); consider vector DB for faster retrieval.
 
 If issues persist, review console logs or consult [ops.md](docs/ops.md).

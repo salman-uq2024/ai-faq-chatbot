@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ingestSources } from "@/lib/ingest/pipeline";
+import { verifyAdminRequest } from "@/lib/admin-auth";
 import { checkOriginAllowed, enforceRateLimit, getOrigin } from "@/lib/security";
 
 const ingestSchema = z.object({
@@ -16,6 +17,11 @@ export async function POST(request: Request) {
   const origin = getOrigin(request);
   if (!(await checkOriginAllowed(origin))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
+  }
+
+  const adminCheck = verifyAdminRequest(request);
+  if (!adminCheck.success) {
+    return NextResponse.json({ error: adminCheck.error ?? "Unauthorized" }, { status: 401 });
   }
 
   const rate = await enforceRateLimit(request);

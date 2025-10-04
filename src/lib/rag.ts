@@ -6,6 +6,8 @@ import type { QueryResult } from "./types";
 
 const MAX_SOURCE_COUNT = 5;
 const MAX_FALLBACK_SENTENCES_PER_SOURCE = 2;
+const SYSTEM_PROMPT =
+  "You are a documentation assistant. Answer using only the provided sources and cite source numbers inline as [S1], [S2], etc.";
 
 const STOP_WORDS = new Set([
   "the",
@@ -153,17 +155,15 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
     .join("\n\n");
 
   try {
-    const model = client.getGenerativeModel({ model: settings.model });
+    const model = client.getGenerativeModel({
+      model: settings.model,
+      systemInstruction: {
+        role: "system",
+        parts: [{ text: SYSTEM_PROMPT }],
+      },
+    });
     const response = await model.generateContent({
       contents: [
-        {
-          role: "system",
-          parts: [
-            {
-              text: "You are a documentation assistant. Answer using only the provided sources and cite source numbers inline as [S1], [S2], etc.",
-            },
-          ],
-        },
         {
           role: "user",
           parts: [

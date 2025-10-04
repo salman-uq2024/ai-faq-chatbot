@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { useSWR } from "@/components/providers";
+import { ADMIN_TOKEN_STORAGE_KEY, useSWR } from "@/components/providers";
 
 type SettingsResponse = {
   model: string;
@@ -44,9 +44,24 @@ const DEFAULT_FORM: IngestFormState = {
   chunkOverlap: 60,
 };
 
+function getStoredAdminToken(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? "";
+}
+
+const AUTH_ERRORS = ["invalid admin token", "missing or invalid admin token", "unauthorized"] as const;
+
 export default function AdminPage() {
-  const { data: settings, mutate: mutateSettings } = useSWR<SettingsResponse>("/api/admin/settings");
-  const { data: log, mutate: mutateLog } = useSWR<IngestionLogResponse>("/api/admin/ingestion-log");
+  const {
+    data: settings,
+    mutate: mutateSettings,
+    error: settingsError,
+  } = useSWR<SettingsResponse>("/api/admin/settings");
+  const { data: log, mutate: mutateLog, error: logError } = useSWR<IngestionLogResponse>(
+    "/api/admin/ingestion-log",
+  );
 
   const [form, setForm] = useState<IngestFormState>(DEFAULT_FORM);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -57,6 +72,9 @@ export default function AdminPage() {
   const [maxTokens, setMaxTokens] = useState(512);
   const [brandColor, setBrandColor] = useState("#2563EB");
   const [allowOrigins, setAllowOrigins] = useState("http://localhost:3000");
+  const [tokenInput, setTokenInput] = useState("");
+  const [tokenStatus, setTokenStatus] = useState<null | "saved" | "cleared" | "error">(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -67,9 +85,64 @@ export default function AdminPage() {
     }
   }, [settings]);
 
+  useEffect(() => {
+    const existing = getStoredAdminToken();
+    if (existing) {
+      setTokenInput(existing);
+    }
+  }, []);
+
   const logEntries = log?.entries ?? [];
 
-  const primaryOrigin = useMemo(() => settings?.allowOrigins[0] ?? "http://localhost:3000", [settings]);
+  const primaryOrigin = useMemo(() => settings?.allowOrigins?.[0] ?? "http://localhost:3000", [settings]);
+
+  const hasAuthError = useMemo(() => {
+    const lowerMessages = [settingsError?.message, logError?.message]
+      .filter(Boolean)
+      .map((message) => message!.toLowerCase());
+    return lowerMessages.some((message) =>
+      AUTH_ERRORS.some((authError) => message.includes(authError)),
+    );
+  }, [settingsError, logError]);
+
+  const applyAdminHeaders = (): Record<string, string> => {
+    const token = getStoredAdminToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const handleSaveToken = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTokenStatus(null);
+    setTokenError(null);
+    try {
+      const trimmed = tokenInput.trim();
+      if (!trimmed) {
+        setTokenError("Enter the token exactly as provided by the deployment environment.");
+        return;
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, trimmed);
+      }
+      setTokenStatus("saved");
+      mutateSettings();
+      mutateLog();
+    } catch (error) {
+      console.error(error);
+      setTokenStatus("error");
+      setTokenError("Failed to persist the token. Please retry.");
+    }
+  };
+
+  const handleClearToken = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    }
+    setTokenInput("");
+    setTokenStatus("cleared");
+    setTokenError(null);
+    mutateSettings();
+    mutateLog();
+  };
 
   const handleUpdateSettings = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -81,7 +154,10 @@ export default function AdminPage() {
         .filter(Boolean);
       const response = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...applyAdminHeaders(),
+        },
         body: JSON.stringify({
           model,
           maxTokens,
@@ -95,7 +171,8 @@ export default function AdminPage() {
       }
       mutateSettings(payload, { revalidate: false });
     } catch (error) {
-      console.error(error);
+      setTokenStatus("error");
+      setTokenError(error instanceof Error ? error.message : "Failed to update settings.");
     } finally {
       setSavingSettings(false);
     }
@@ -125,7 +202,10 @@ export default function AdminPage() {
       }
       const response = await fetch("/api/admin/ingest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...applyAdminHeaders(),
+        },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
@@ -150,6 +230,52 @@ export default function AdminPage() {
           Configure your model, update branding, and ingest content. All LLM calls happen on the server; client bundles never include secrets.
         </p>
       </header>
+
+      <Card header="Admin access">
+        <p className="text-xs text-slate-500">
+          Protected API routes require the <code>ADMIN_TOKEN</code> configured on the server. Paste it below to
+          store it locally; requests from this browser will send it automatically.
+        </p>
+        <form className="space-y-3" onSubmit={handleSaveToken}>
+          <Input
+            type="password"
+            placeholder="Enter admin token"
+            value={tokenInput}
+            onChange={(event) => {
+              setTokenInput(event.target.value);
+              setTokenStatus(null);
+              setTokenError(null);
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">Save token</Button>
+            <Button type="button" variant="secondary" onClick={handleClearToken}>
+              Clear stored token
+            </Button>
+          </div>
+        </form>
+        {hasAuthError && (
+          <Alert variant="error" className="mt-4">
+            Unable to reach the admin API with the current token. Verify <code>ADMIN_TOKEN</code> on the server and
+            update the stored value here.
+          </Alert>
+        )}
+        {tokenStatus === "saved" && !hasAuthError && (
+          <Alert variant="success" className="mt-4">
+            Token saved. Reloaded data will now use authenticated requests.
+          </Alert>
+        )}
+        {tokenStatus === "cleared" && (
+          <Alert variant="info" className="mt-4">
+            Token cleared. Requests will proceed without authentication until you save a new token.
+          </Alert>
+        )}
+        {tokenError && (
+          <Alert variant="error" className="mt-4">
+            {tokenError}
+          </Alert>
+        )}
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Card
@@ -275,10 +401,14 @@ export default function AdminPage() {
           <Card header="Embed instructions">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Widget loader</p>
             <pre className="rounded-xl bg-slate-900 p-3 text-[11px] text-slate-100 shadow-inner">
-              {`<script src="${primaryOrigin}/widget.js" async></script>`}
+              {`<script src="${primaryOrigin}/widget.js"
+  data-api-url="${primaryOrigin}/api/query"
+  data-button-text="Ask our AI"
+  async></script>`}
             </pre>
             <p className="text-xs text-slate-500">
-              Place the snippet before <code>&lt;/body&gt;</code> on any domain listed above. Requests hit <code>/api/query</code> on this deployment.
+              Place the snippet before <code>&lt;/body&gt;</code> on any domain listed above. Override <code>data-api-url</code>
+              for cross-origin deployments or add <code>data-brand-color</code> to match your palette.
             </p>
           </Card>
         </div>

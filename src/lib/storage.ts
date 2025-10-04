@@ -3,7 +3,16 @@ import path from "path";
 import { randomUUID } from "crypto";
 import type { AppSettings, Chunk } from "./types";
 
-const dataDir = path.join(process.cwd(), "data");
+function resolveStorageDir(): string {
+  const override = process.env.STORAGE_DIR;
+  if (!override) {
+    return path.join(process.cwd(), "data");
+  }
+
+  return path.isAbsolute(override) ? override : path.join(process.cwd(), override);
+}
+
+const dataDir = resolveStorageDir();
 const chunksFile = path.join(dataDir, "chunks.json");
 const settingsFile = path.join(dataDir, "settings.json");
 const ingestionLogFile = path.join(dataDir, "ingestion-log.json");

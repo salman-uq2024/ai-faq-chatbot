@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSettings, updateSettings } from "@/lib/storage";
+import { verifyAdminRequest } from "@/lib/admin-auth";
 import { enforceRateLimit, checkOriginAllowed, getOrigin } from "@/lib/security";
 
 const updateSchema = z.object({
@@ -15,6 +16,10 @@ export async function GET(request: Request) {
   if (!(await checkOriginAllowed(origin))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
+  const adminCheck = verifyAdminRequest(request);
+  if (!adminCheck.success) {
+    return NextResponse.json({ error: adminCheck.error ?? "Unauthorized" }, { status: 401 });
+  }
   const rate = await enforceRateLimit(request);
   if (!rate.success) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
@@ -27,6 +32,10 @@ export async function PUT(request: Request) {
   const origin = getOrigin(request);
   if (!(await checkOriginAllowed(origin))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
+  }
+  const adminCheck = verifyAdminRequest(request);
+  if (!adminCheck.success) {
+    return NextResponse.json({ error: adminCheck.error ?? "Unauthorized" }, { status: 401 });
   }
   const rate = await enforceRateLimit(request);
   if (!rate.success) {

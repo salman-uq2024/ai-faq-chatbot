@@ -3,7 +3,7 @@ import { getSettings } from "@/lib/storage";
 
 export async function GET() {
   const settings = await getSettings();
-  const brand = JSON.stringify(settings.brandColor);
+  const defaultBrand = JSON.stringify(settings.brandColor);
 
   const script = `(() => {
     if (window.__aiFaqWidgetLoaded) return;
@@ -11,7 +11,20 @@ export async function GET() {
     const scriptEl = document.currentScript;
     if (!scriptEl) return;
     const appOrigin = new URL(scriptEl.src).origin;
-    const BRAND = ${brand};
+    const apiUrlAttr = scriptEl.dataset.apiUrl;
+    const brandAttr = scriptEl.dataset.brandColor;
+    const buttonTextAttr = scriptEl.dataset.buttonText;
+    let API_URL = appOrigin + '/api/query';
+    if (apiUrlAttr) {
+      try {
+        API_URL = new URL(apiUrlAttr, appOrigin).toString();
+      } catch (error) {
+        console.warn('ai-faq-widget: invalid data-api-url provided, using raw value');
+        API_URL = apiUrlAttr;
+      }
+    }
+    const BRAND = brandAttr || ${defaultBrand};
+    const BUTTON_TEXT = buttonTextAttr || 'Ask our AI';
 
     const style = document.createElement('style');
     style.textContent = [
@@ -92,7 +105,7 @@ export async function GET() {
 
     const button = document.createElement('button');
     button.className = 'ai-faq-button';
-    button.textContent = 'Ask our AI';
+    button.textContent = BUTTON_TEXT;
 
     const backdrop = document.createElement('div');
     backdrop.className = 'ai-faq-modal-backdrop';
@@ -140,7 +153,7 @@ export async function GET() {
       sourcesEl.textContent = '';
 
       try {
-        const res = await fetch(appOrigin + '/api/query', {
+        const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question }),
