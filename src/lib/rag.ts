@@ -1,13 +1,19 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { embedTexts, cosineSimilarity } from "./embedding";
-import { buildSnippet } from "./text";
+import { buildSnippet, cleanText } from "./text";
 import { getChunks, getSettings } from "./storage";
 import type { Chunk, QueryResult } from "./types";
 
 const MAX_SOURCE_COUNT = 5;
 const MIN_RELEVANCE_SCORE = 0.18;
+const MAX_BULLETS = 3;
 const SYSTEM_PROMPT =
   "You are a documentation assistant. Answer using only the provided sources and cite source numbers inline as [S1], [S2], etc.";
+const GREETING_PATTERNS = [/^\s*hi\b/i, /^\s*hello\b/i, /^\s*hey\b/i, /^\s*good\s+(morning|afternoon|evening)\b/i];
+
+function isGreeting(question: string): boolean {
+  return GREETING_PATTERNS.some((pattern) => pattern.test(question));
+}
 
 let geminiClient: GoogleGenerativeAI | null = null;
 
@@ -41,21 +47,91 @@ function filterRelevant(chunks: RankedChunk[]): RankedChunk[] {
   return chunks.filter(({ score }) => Number.isFinite(score) && score >= MIN_RELEVANCE_SCORE);
 }
 
+function dedupeBySource(chunks: RankedChunk[]): RankedChunk[] {
+  const seen = new Set<string>();
+  const deduped: RankedChunk[] = [];
+  for (const entry of chunks) {
+    if (seen.has(entry.chunk.sourceUrl)) {
+      continue;
+    }
+    seen.add(entry.chunk.sourceUrl);
+    deduped.push(entry);
+    if (deduped.length >= MAX_SOURCE_COUNT) {
+      break;
+    }
+  }
+  return deduped;
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2);
+}
+
+function selectRelevantSentences(question: string, content: string, limit = 2): string[] {
+  const sanitized = cleanText(content);
+  if (!sanitized) {
+    return [];
+  }
+
+  const sentences = sanitized.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (sentences.length === 0) {
+    return [];
+  }
+
+  const queryTokens = new Set(tokenize(question));
+  if (queryTokens.size === 0) {
+    return sentences.slice(0, limit).map((sentence) => sentence.trim());
+  }
+
+  const scored = sentences
+    .map((sentence) => {
+      const sentenceTokens = tokenize(sentence);
+      const overlap = sentenceTokens.reduce(
+        (total, token) => (queryTokens.has(token) ? total + 1 : total),
+        0,
+      );
+      return { sentence: sentence.trim(), overlap };
+    })
+    .filter((item) => item.overlap > 0);
+
+  if (scored.length === 0) {
+    return sentences.slice(0, limit).map((sentence) => sentence.trim());
+  }
+
+  return scored
+    .sort((a, b) => b.overlap - a.overlap)
+    .slice(0, limit)
+    .map((item) => item.sentence);
+}
+
 function formatFallbackAnswer(question: string, ranked: RankedChunk[]): string {
   if (ranked.length === 0) {
     return "I couldn’t find anything in the current knowledge base about that question.";
   }
 
-  const bulletPoints = ranked.map(({ chunk }, index) => {
-    const snippet = buildSnippet(chunk.content, 280);
-    const title = chunk.title ? `${chunk.title}: ` : "";
-    return `• ${title}${snippet} [S${index + 1}]`;
+  const limit = Math.min(ranked.length, MAX_BULLETS);
+  const bulletPoints = ranked.slice(0, limit).map(({ chunk }, index) => {
+    const summarySentences = selectRelevantSentences(question, chunk.content, 2);
+    const summary = summarySentences.length > 0 ? summarySentences.join(" ") : buildSnippet(chunk.content, 220);
+    const title = chunk.title ? `${chunk.title} — ` : "";
+    return `• ${title}${summary} [S${index + 1}]`;
   });
 
   return `Here’s what I found related to “${question}”:\n\n${bulletPoints.join("\n\n")}`;
 }
 
 export async function runRagPipeline(question: string): Promise<QueryResult> {
+  if (isGreeting(question)) {
+    return {
+      answer: "Hi there! Ask me about the topics we’ve ingested, or let me know what you’d like to learn.",
+      sources: [],
+    };
+  }
+
   const chunks = await getChunks();
   if (chunks.length === 0) {
     return {
@@ -66,7 +142,8 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
 
   const [questionEmbedding] = await embedTexts([question]);
   const ranked = rankChunks(questionEmbedding, chunks);
-  const relevant = filterRelevant(ranked);
+  const filtered = filterRelevant(ranked);
+  const relevant = dedupeBySource(filtered);
 
   if (relevant.length === 0) {
     return {
