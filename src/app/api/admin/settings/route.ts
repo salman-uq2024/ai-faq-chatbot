@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAllowedOrigin } from "@/lib/origin";
 import { z } from "zod";
 import { getSettings, updateSettings } from "@/lib/storage";
 import { verifyAdminRequest } from "@/lib/admin-auth";

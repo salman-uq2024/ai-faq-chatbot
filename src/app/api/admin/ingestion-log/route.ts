@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAllowedOrigin } from "@/lib/origin";
 import { getIngestionLog } from "@/lib/storage";
 import { verifyAdminRequest } from "@/lib/admin-auth";
 import { checkOriginAllowed, enforceRateLimit, getOrigin } from "@/lib/security";

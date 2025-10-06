@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAllowedOrigin } from "@/lib/origin";
 import { z } from "zod";
 import { runRagPipeline } from "@/lib/rag";
 import { checkOriginAllowed, enforceRateLimit, getOrigin } from "@/lib/security";
