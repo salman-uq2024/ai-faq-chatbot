@@ -22,6 +22,8 @@ async function embedWithGemini(texts: string[], client: GoogleGenerativeAI): Pro
   const candidates = [
     process.env.GEMINI_EMBEDDING_MODEL ?? "models/embedding-001",
     "models/text-embedding-004",
+    "models/embedding-gecko-001",
+    "models/gemini-embedding-001",
     "models/embedding-001",
   ].filter((v, i, arr) => Boolean(v) && arr.indexOf(v) === i) as string[];
 

@@ -26,7 +26,8 @@ export function getOrigin(request: Request): string | null {
 }
 
 export async function checkOriginAllowed(origin: string | null): Promise<boolean> {
-  if (!origin) {
+  // Allow same-origin or opaque origins like file:// which appear as "null".
+  if (!origin || origin === "null") {
     return true;
   }
   try {

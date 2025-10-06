@@ -8,7 +8,8 @@ const ALLOWED_HEADERS = "Content-Type, Authorization";
 const PREFLIGHT_MAX_AGE_SECONDS = "86400";
 
 function withCors(response: NextResponse, origin: string | null) {
-  if (origin) {
+  // For opaque origins (e.g., file:// → "null") or missing origin, return wildcard
+  if (origin && origin !== "null") {
     response.headers.set("Access-Control-Allow-Origin", origin);
     response.headers.set("Vary", "Origin");
   } else {

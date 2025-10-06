@@ -49,6 +49,7 @@ export async function GET() {
       '  display: none;',
       '  align-items: center;',
       '  justify-content: center;',
+      '  overflow: auto;',
       '  z-index: 9998;',
       '}',
       '.ai-faq-modal {',
@@ -58,6 +59,12 @@ export async function GET() {
       '  padding: 20px;',
       '  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);',
       '  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;',
+      '  box-sizing: border-box;',
+      '  display: flex;',
+      '  flex-direction: column;',
+      '  gap: 12px;',
+      '  max-height: 85vh;',
+      '  overflow: auto;',
       '}',
       '.ai-faq-modal h2 {',
       '  margin: 0 0 12px;',
@@ -66,7 +73,7 @@ export async function GET() {
       '.ai-faq-modal form {',
       '  display: flex;',
       '  flex-direction: column;',
-      '  gap: 12px;',
+      '  gap: 10px;',
       '}',
       '.ai-faq-modal textarea {',
       '  width: 100%;',
@@ -76,6 +83,7 @@ export async function GET() {
       '  border-radius: 12px;',
       '  border: 1px solid #d1d5db;',
       '  font-size: 15px;',
+      '  box-sizing: border-box;',
       '}',
       '.ai-faq-modal button[type=submit] {',
       '  align-self: flex-end;',
@@ -88,17 +96,26 @@ export async function GET() {
       '  font-size: 15px;',
       '}',
       '.ai-faq-response {',
-      '  margin-top: 16px;',
+      '  margin-top: 8px;',
       '  white-space: pre-wrap;',
       '  font-size: 14px;',
-      '  line-height: 1.5;',
+      '  line-height: 1.6;',
+      '  overflow-wrap: anywhere;',
+      '  max-height: 40vh;',
+      '  overflow-y: auto;',
       '}',
       '.ai-faq-sources {',
-      '  margin-top: 12px;',
+      '  margin-top: 8px;',
       '  font-size: 13px;',
+      '  max-height: 20vh;',
+      '  overflow-y: auto;',
       '}',
       '.ai-faq-sources ul {',
       '  padding-left: 18px;',
+      '}',
+      '.ai-faq-sources a {',
+      '  color: #2563EB;',
+      '  text-decoration: underline;',
       '}',
     ].join(String.fromCharCode(10));
     document.head.appendChild(style);
@@ -126,11 +143,13 @@ export async function GET() {
     function openModal() {
       backdrop.style.display = 'flex';
       button.style.display = 'none';
+      try { document.body.style.overflow = 'hidden'; } catch (e) {}
     }
 
     function closeModal() {
       backdrop.style.display = 'none';
       button.style.display = 'block';
+      try { document.body.style.overflow = ''; } catch (e) {}
     }
 
     backdrop.addEventListener('click', (event) => {
