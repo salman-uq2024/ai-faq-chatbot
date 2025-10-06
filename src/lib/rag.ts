@@ -70,6 +70,22 @@ function isPureGreeting(question: string): boolean {
   return tokens.every((t) => GREETING_FILLER.has(t) || ["hi", "hello", "hey", "good", "morning", "afternoon", "evening"].includes(t));
 }
 
+function isAboutAssistant(question: string): boolean {
+  const q = question.toLowerCase();
+  return (
+    /\bwho\s+are\s+you\b/.test(q) ||
+    /\bwhat\s+are\s+you\b/.test(q) ||
+    /\bwhat\s+do\s+you\s+do\b/.test(q) ||
+    /\btell\s+me\s+about\s+yourself\b/.test(q)
+  );
+}
+
+function assistantIntro(): string {
+  return (
+    "I’m an AI FAQ Chatbot wired to your documentation. Paste a docs URL in the admin to ingest pages, then ask questions here. I answer with short, grounded summaries and cite sources like [S1], [S2]."
+  );
+}
+
 let geminiClient: GoogleGenerativeAI | null = null;
 
 function getGemini(): GoogleGenerativeAI | null {
@@ -310,6 +326,10 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
     };
   }
 
+  if (isAboutAssistant(question)) {
+    return { answer: assistantIntro(), sources: [] };
+  }
+
   const chunks = await getChunks();
   if (chunks.length === 0) {
     return {
@@ -318,8 +338,12 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
     };
   }
 
-  const [questionEmbedding] = await embedTexts([question]);
-  const ranked = rankChunks(question, questionEmbedding, chunks);
+  // Support very simple multi-question input: split on '?' and answer up to two.
+  const rawParts = question.split(/[?]/).map((s) => s.trim()).filter((s) => s.length > 0);
+  const parts = rawParts.length > 1 ? rawParts.slice(0, 2) : [question];
+
+  const [questionEmbedding] = await embedTexts([parts[0]]);
+  const ranked = rankChunks(parts[0], questionEmbedding, chunks);
   const filtered = filterRelevant(ranked).filter(({ chunk }) => lexicalOverlap(question, chunk.content) > 0);
   const relevant = dedupeBySource(filtered);
 
@@ -342,10 +366,17 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
 
   if (!hasGemini) {
-    return {
-      answer: formatStructuredFallbackAnswer(question, relevant),
-      sources,
-    };
+    if (parts.length === 1) {
+      return { answer: formatStructuredFallbackAnswer(parts[0], relevant), sources };
+    }
+    // Multi-question fallback: build sections
+    const sections: string[] = [];
+    for (const p of parts) {
+      const [emb] = await embedTexts([p]);
+      const r = dedupeBySource(filterRelevant(rankChunks(p, emb, chunks)));
+      sections.push(formatStructuredFallbackAnswer(p, r));
+    }
+    return { answer: sections.join("\n\n"), sources };
   }
 
   const client = getGemini();
