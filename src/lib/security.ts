@@ -15,9 +15,7 @@ function now(): number {
 
 export function getClientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() ?? "unknown";
-  }
+  if (forwarded) return forwarded.split(",")[0]?.trim() ?? "unknown";
   return request.headers.get("x-real-ip") ?? "unknown";
 }
 
@@ -25,7 +23,9 @@ export function getOrigin(request: Request): string | null {
   const o = request.headers.get("origin");
   if (o && o !== "null") return o;
   const ref = request.headers.get("referer");
-  if (ref) { try { const u = new URL(ref); return `${u.protocol}//${u.host}`; } catch {} }
+  if (ref) {
+    try { const u = new URL(ref); return `${u.protocol}//${u.host}`; } catch {}
+  }
   const host = request.headers.get("host");
   return host ? `https://${host}` : null;
 }
@@ -34,7 +34,7 @@ export async function checkOriginAllowed(origin: string | null): Promise<boolean
   if (!origin || origin === "null") return true;
   const norm = normalize(origin);
   const envRaw = process.env.ORIGIN_ALLOWLIST ?? "";
-  const env = envRaw.split(/[,s]+/).filter(Boolean).map(normalize);
+  const env = envRaw.split(/[,\s]+/).filter(Boolean).map(normalize);
   let cfg: string[] = [];
   try {
     const settings = await getSettings();
@@ -43,23 +43,10 @@ export async function checkOriginAllowed(origin: string | null): Promise<boolean
   const allow = new Set<string>([...env, ...cfg]);
   return allow.has(norm);
 }
-function normalize(v: string): string {
-  try { const u = new URL(v); return `${u.protocol}//${u.host}`; }
-  catch { return v.trim().toLowerCase().replace(/\/$/, ""); }
-}
 
 function normalize(v: string): string {
   try { const u = new URL(v); return `${u.protocol}//${u.host}`; }
   catch { return v.trim().toLowerCase().replace(/\/$/, ""); }
-}
-try {
-    const url = new URL(origin);
-    const normalized = `${url.protocol}//${url.host}`;
-    const settings = await getSettings();
-    return settings.allowOrigins.includes(normalized);
-  } catch {
-    return false;
-  }
 }
 
 export async function enforceRateLimit(request: Request): Promise<RateLimitCheck> {
@@ -67,7 +54,7 @@ export async function enforceRateLimit(request: Request): Promise<RateLimitCheck
   const ip = getClientIp(request);
   const key = `${origin}:${ip}`;
   const limit = Number(process.env.RATE_LIMIT_PER_MINUTE ?? DEFAULT_LIMIT);
-  const ttl = 60_000; // 1 minute
+  const ttl = 60_000;
 
   const bucket = rateLimitBuckets.get(key);
   const timestamp = now();
