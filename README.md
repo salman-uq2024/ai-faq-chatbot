@@ -62,7 +62,7 @@ Copy `.env.example` to `.env.local` and configure:
 
 - `GEMINI_API_KEY`: Google Gemini API key used for embeddings and responses. Without it the app falls back to offline TF-IDF answers.
 - `ADMIN_TOKEN`: Optional bearer token that locks down `/admin` APIs in production.
-- `STORAGE_DIR`: Optional path override for chunk storage (set to `/tmp/data` on serverless hosts like Vercel).
+- `STORAGE_DIR`: Optional path override for chunk storage (set to `/tmp/data` on serverless hosts like Vercel). If you omit it on Vercel the app automatically falls back to `/tmp/ai-faq-chatbot`.
 - `RATE_LIMIT_PER_MINUTE`: Override the default per-origin rate limit.
 
 For demo mode without keys, the app uses hashed TF-IDF style vectors to return stored snippets.
@@ -123,7 +123,7 @@ Deploy seamlessly to Vercel with one click:
 3. Add environment variables:
    - `GEMINI_API_KEY`
    - `ADMIN_TOKEN` (recommended for production dashboards)
-   - `STORAGE_DIR=/tmp/data` (required on serverless platforms)
+   - `STORAGE_DIR=/tmp/data` (recommended on serverless platforms; if omitted the app falls back to `/tmp/ai-faq-chatbot`)
    - `RATE_LIMIT_PER_MINUTE`
 4. Deploy – automatic builds and optimizations included.
 

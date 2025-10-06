@@ -39,7 +39,7 @@ Vercel offers serverless deployment, automatic scaling, and easy env var managem
    - `GEMINI_EMBEDDING_MODEL=models/embedding-001`: Model for vector embeddings (tries `models/text-embedding-004` if unavailable).
    - `GEMINI_FALLBACK_MODEL=models/gemini-2.0-flash`: Optional alternate generation model.
    - `ADMIN_TOKEN=generate-a-strong-token`: Protects `/admin` APIs. Paste this token into the dashboard when prompted.
-   - `STORAGE_DIR=/tmp/data`: Required on Vercel/Netlify so chunk files persist for the lifetime of the function.
+   - `STORAGE_DIR=/tmp/data`: Recommended on Vercel/Netlify so chunk files persist for the lifetime of the function. If unset, the app falls back to `/tmp/ai-faq-chatbot` automatically.
    - `RATE_LIMIT_PER_MINUTE=60`: Higher limit for production (adjust as needed).
    Add any production secrets, like database URLs.
 5. Click **Deploy**. Vercel builds and deploys; you'll get a live URL (e.g., `your-app.vercel.app`).

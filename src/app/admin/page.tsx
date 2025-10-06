@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -224,8 +225,26 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-10 px-6 py-12">
       <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Control centre</p>
-        <h1 className="text-3xl font-semibold text-slate-900">Admin Dashboard</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Control centre</p>
+            <h1 className="text-3xl font-semibold text-slate-900">Admin Dashboard</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-200"
+            >
+              Go to app
+            </Link>
+            <Link
+              href="/demo"
+              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+            >
+              View demo
+            </Link>
+          </div>
+        </div>
         <p className="text-sm text-slate-600">
           Configure your model, update branding, and ingest content. All LLM calls happen on the server; client bundles never include secrets.
         </p>

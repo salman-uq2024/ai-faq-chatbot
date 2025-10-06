@@ -3,22 +3,46 @@ import path from "path";
 import { randomUUID } from "crypto";
 import type { AppSettings, Chunk } from "./types";
 
-function resolveStorageDir(): string {
+function resolvePrimaryStorageDir(): string {
   const override = process.env.STORAGE_DIR;
-  if (!override) {
-    return path.join(process.cwd(), "data");
+  if (override) {
+    return path.isAbsolute(override) ? override : path.join(process.cwd(), override);
   }
 
-  return path.isAbsolute(override) ? override : path.join(process.cwd(), override);
+  const isServerless = process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_VERSION);
+  if (isServerless) {
+    return "/tmp/ai-faq-chatbot";
+  }
+
+  return path.join(process.cwd(), "data");
 }
 
-const dataDir = resolveStorageDir();
-const chunksFile = path.join(dataDir, "chunks.json");
-const settingsFile = path.join(dataDir, "settings.json");
-const ingestionLogFile = path.join(dataDir, "ingestion-log.json");
+let dataDir = resolvePrimaryStorageDir();
+let chunksFile = path.join(dataDir, "chunks.json");
+let settingsFile = path.join(dataDir, "settings.json");
+let ingestionLogFile = path.join(dataDir, "ingestion-log.json");
+
+async function switchToDir(dir: string) {
+  dataDir = dir;
+  chunksFile = path.join(dataDir, "chunks.json");
+  settingsFile = path.join(dataDir, "settings.json");
+  ingestionLogFile = path.join(dataDir, "ingestion-log.json");
+  await fs.mkdir(dataDir, { recursive: true });
+}
 
 async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
+  try {
+    await fs.mkdir(dataDir, { recursive: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EROFS" || code === "EACCES" || code === "EPERM") {
+      if (dataDir !== "/tmp/ai-faq-chatbot") {
+        await switchToDir("/tmp/ai-faq-chatbot");
+        return;
+      }
+    }
+    throw error;
+  }
 }
 
 class Mutex {
