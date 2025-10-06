@@ -29,25 +29,16 @@ export function getOrigin(request: Request): string | null {
   const host = request.headers.get("host");
   return host ? `https://${host}` : null;
 }
-
 export async function checkOriginAllowed(origin: string | null): Promise<boolean> {
   if (!origin || origin === "null") return true;
   const norm = normalize(origin);
   const envRaw = process.env.ORIGIN_ALLOWLIST ?? "";
   const env = envRaw.split(/[,s]+/).filter(Boolean).map(normalize);
-  let cfg: string[] = [];
-  try {
-    const settings = await getSettings();
-    cfg = (settings.allowOrigins ?? []).map(normalize);
-  } catch {}
-  const allow = new Set<string>([...env, ...cfg]);
+  let cfg = [] as string[];
+  try { const settings = await getSettings(); cfg = (settings.allowOrigins ?? []).map(normalize); } catch {}
+  const allow = new Set([...env, ...cfg]);
   return allow.has(norm);
 }
-function normalize(v: string): string {
-  try { const u = new URL(v); return `${u.protocol}//${u.host}`; }
-  catch { return v.trim().toLowerCase().replace(/\/$/, ""); }
-}
-
 function normalize(v: string): string {
   try { const u = new URL(v); return `${u.protocol}//${u.host}`; }
   catch { return v.trim().toLowerCase().replace(/\/$/, ""); }
