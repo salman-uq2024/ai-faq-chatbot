@@ -22,15 +22,28 @@ export function getClientIp(request: Request): string {
 }
 
 export function getOrigin(request: Request): string | null {
-  return request.headers.get("origin") ?? request.headers.get("referer");
+  const o = request.headers.get("origin");
+  if (o && o !== "null") return o;
+  const ref = request.headers.get("referer");
+  if (ref) { try { const u = new URL(ref); return `${u.protocol}//${u.host}`; } catch {} }
+  const host = request.headers.get("host");
+  return host ? `https://${host}` : null;
 }
-
 export async function checkOriginAllowed(origin: string | null): Promise<boolean> {
-  // Allow same-origin or opaque origins like file:// which appear as "null".
-  if (!origin || origin === "null") {
-    return true;
-  }
-  try {
+  if (!origin || origin === "null") return true;
+  const norm = normalize(origin);
+  const envRaw = process.env.ORIGIN_ALLOWLIST ?? "";
+  const env = envRaw.split(/[,s]+/).filter(Boolean).map(normalize);
+  let cfg = [] as string[];
+  try { const settings = await getSettings(); cfg = (settings.allowOrigins ?? []).map(normalize); } catch {}
+  const allow = new Set([...env, ...cfg]);
+  return allow.has(norm);
+}
+function normalize(v: string): string {
+  try { const u = new URL(v); return `${u.protocol}//${u.host}`; }
+  catch { return v.trim().toLowerCase().replace(/\/$/, ""); }
+}
+try {
     const url = new URL(origin);
     const normalized = `${url.protocol}//${url.host}`;
     const settings = await getSettings();
