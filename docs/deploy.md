@@ -36,7 +36,8 @@ Vercel offers serverless deployment, automatic scaling, and easy env var managem
    - Install Command: `npm install`
 4. In **Environment Variables**, add the same vars as local (from `.env.local`):
    - `GEMINI_API_KEY=your-production-api-key`: For secure AI queries and embeddings.
-   - `GEMINI_EMBEDDING_MODEL=models/embedding-001`: Model for vector embeddings.
+   - `GEMINI_EMBEDDING_MODEL=models/embedding-001`: Model for vector embeddings (tries `models/text-embedding-004` if unavailable).
+   - `GEMINI_FALLBACK_MODEL=models/gemini-2.0-flash`: Optional alternate generation model.
    - `ADMIN_TOKEN=generate-a-strong-token`: Protects `/admin` APIs. Paste this token into the dashboard when prompted.
    - `STORAGE_DIR=/tmp/data`: Required on Vercel/Netlify so chunk files persist for the lifetime of the function.
    - `RATE_LIMIT_PER_MINUTE=60`: Higher limit for production (adjust as needed).

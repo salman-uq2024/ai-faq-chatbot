@@ -67,7 +67,7 @@ type IngestionLogShape = {
 };
 
 const defaultSettings: AppSettings = {
-  model: "models/gemini-1.5-flash",
+  model: "models/gemini-2.0-flash",
   maxTokens: 512,
   brandColor: "#2563EB",
   allowOrigins: [

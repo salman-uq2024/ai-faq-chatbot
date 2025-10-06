@@ -19,26 +19,34 @@ function getGeminiClient(): GoogleGenerativeAI | null {
 }
 
 async function embedWithGemini(texts: string[], client: GoogleGenerativeAI): Promise<number[][] | null> {
-  try {
-    const modelName = process.env.GEMINI_EMBEDDING_MODEL ?? "models/embedding-001";
-    const model = client.getGenerativeModel({ model: modelName });
-    const response = await model.batchEmbedContents({
-      requests: texts.map((text) => ({
-        content: {
-          role: "user",
-          parts: [{ text }],
-        },
-      })),
-    });
-    const embeddings = response.embeddings ?? [];
-    if (!embeddings?.length) {
-      return null;
+  const candidates = [
+    process.env.GEMINI_EMBEDDING_MODEL ?? "models/embedding-001",
+    "models/text-embedding-004",
+    "models/embedding-001",
+  ].filter((v, i, arr) => Boolean(v) && arr.indexOf(v) === i) as string[];
+
+  for (const modelName of candidates) {
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const response = await model.batchEmbedContents({
+        requests: texts.map((text) => ({
+          content: {
+            role: "user",
+            parts: [{ text }],
+          },
+        })),
+      });
+      const embeddings = response.embeddings ?? [];
+      if (embeddings?.length) {
+        return embeddings.map((item) => item.values);
+      }
+    } catch (error) {
+      console.warn(`Embedding model ${modelName} failed, trying next if available.`);
+      continue;
     }
-    return embeddings.map((item) => item.values);
-  } catch (error) {
-    console.error("Embedding request failed, using fallback", error);
-    return null;
   }
+  console.error("All embedding model attempts failed; using fallback vectors");
+  return null;
 }
 
 function hashWord(word: string): number {

@@ -36,7 +36,7 @@ type IngestFormState = {
 };
 
 const DEFAULT_FORM: IngestFormState = {
-  baseUrl: "https://nextjs.org",
+  baseUrl: "https://nextjs.org/docs",
   pdfUrls: "",
   crawlDepth: 2,
   maxPages: 10,
@@ -68,7 +68,7 @@ export default function AdminPage() {
   const [ingesting, setIngesting] = useState(false);
   const [ingestMessage, setIngestMessage] = useState<string | null>(null);
   const [ingestError, setIngestError] = useState<string | null>(null);
-  const [model, setModel] = useState("models/gemini-1.5-flash");
+  const [model, setModel] = useState("models/gemini-2.0-flash");
   const [maxTokens, setMaxTokens] = useState(512);
   const [brandColor, setBrandColor] = useState("#2563EB");
   const [allowOrigins, setAllowOrigins] = useState("http://localhost:3000");
@@ -288,10 +288,14 @@ export default function AdminPage() {
                 Base URL
               </label>
               <Input
-                placeholder="https://docs.yourdomain.com"
+                placeholder="https://yourdomain.com/docs"
                 value={form.baseUrl}
                 onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value }))}
               />
+              <p className="text-xs text-slate-500">
+                Tip: Ingest documentation pages (e.g., <code>https://yourdomain.com/docs</code>) for cleaner, more
+                relevant answers. Homepages often include marketing and navigation text.
+              </p>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">

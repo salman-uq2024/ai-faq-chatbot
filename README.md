@@ -38,7 +38,7 @@ AI-Powered FAQ Chatbot: Ingest documents via RAG, query intelligently, with admi
 - [React](https://react.dev) 19 with [SWR](https://swr.vercel.app)
 - [TypeScript](https://www.typescriptlang.org) for type safety
 - [Tailwind CSS](https://tailwindcss.com) for styling
-- [Google Gemini API](https://ai.google.dev/) for embeddings and grounded responses (with offline fallback vectors)
+- [Google Gemini API](https://ai.google.dev/) for embeddings and grounded responses (with offline fallback vectors). Default generation model is `models/gemini-2.0-flash`. You can change it in the Admin settings and the app will also try a fallback if the primary isn’t enabled for your key.
 - File-based vector storage configurable via `STORAGE_DIR`, ready to swap for hosted options
 
 ## Quick Start

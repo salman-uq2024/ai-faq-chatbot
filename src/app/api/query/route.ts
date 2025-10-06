@@ -32,7 +32,7 @@ export async function OPTIONS(request: Request) {
 }
 
 const querySchema = z.object({
-  question: z.string().min(3),
+  question: z.string().min(1),
 });
 
 export async function POST(request: Request) {

@@ -49,9 +49,10 @@ cp .env.example .env.local
 Edit `.env.local` with your values. Key variables include:
 
 - `GEMINI_API_KEY=your-gemini-api-key-here`: Required for AI embeddings and query responses using Google Gemini. Without this, the app falls back to similarity matching (see [src/lib/embedding.ts](../src/lib/embedding.ts)).
-- `GEMINI_EMBEDDING_MODEL=models/embedding-001`: The Gemini model for generating embeddings (default if unset).
+- `GEMINI_EMBEDDING_MODEL=models/embedding-001`: The Gemini model for generating embeddings (default if unset). If unavailable, the app tries `models/text-embedding-004` automatically.
 - `ADMIN_TOKEN=change-me`: Optional bearer token that protects `/admin` APIs in production. Save it locally in the dashboard to authenticate requests.
 - `STORAGE_DIR=/tmp/data`: Override the chunks location. Set this to `/tmp/data` on Vercel/Netlify or to a mounted volume when self-hosting.
+- `GEMINI_FALLBACK_MODEL=models/gemini-2.0-flash`: Optional alternate model to try if your primary model isn’t enabled on your key.
 - `RATE_LIMIT_PER_MINUTE=30`: Limits queries per minute to prevent abuse (configurable in [src/lib/security.ts](../src/lib/security.ts)).
 
 Example `.env.local`:
