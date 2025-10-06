@@ -30,8 +30,20 @@ export function getOrigin(request: Request): string | null {
   return host ? `https://${host}` : null;
 }
 
-export async function checkOriginAllowed(origin: string | null): Promise<boolean> {
+export async function checkOriginAllowed(origin: string | null, requestHost?: string | null): Promise<boolean> {
   if (!origin || origin === "null") return true;
+
+  if (requestHost) {
+    try {
+      const { host } = new URL(origin);
+      if (host === requestHost) {
+        return true;
+      }
+    } catch {
+      if (origin.includes(requestHost)) return true;
+    }
+  }
+
   const norm = normalize(origin);
   const envRaw = process.env.ORIGIN_ALLOWLIST ?? "";
   const env = envRaw.split(/[,\s]+/).filter(Boolean).map(normalize);

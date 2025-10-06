@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isAllowedOrigin } from "@/lib/origin";
 import { z } from "zod";
 import { runRagPipeline } from "@/lib/rag";
 import { checkOriginAllowed, enforceRateLimit, getOrigin } from "@/lib/security";
@@ -26,7 +25,8 @@ function withCors(response: NextResponse, origin: string | null) {
 
 export async function OPTIONS(request: Request) {
   const origin = getOrigin(request);
-  if (!(await checkOriginAllowed(origin))) {
+  const host = request.headers.get("host");
+  if (!(await checkOriginAllowed(origin, host))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 
@@ -39,7 +39,8 @@ const querySchema = z.object({
 
 export async function POST(request: Request) {
   const origin = getOrigin(request);
-  if (!(await checkOriginAllowed(origin))) {
+  const host = request.headers.get("host");
+  if (!(await checkOriginAllowed(origin, host))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isAllowedOrigin } from "@/lib/origin";
 import { z } from "zod";
 import { getSettings, updateSettings } from "@/lib/storage";
 import { verifyAdminRequest } from "@/lib/admin-auth";
@@ -14,7 +13,8 @@ const updateSchema = z.object({
 
 export async function GET(request: Request) {
   const origin = getOrigin(request);
-  if (!(await checkOriginAllowed(origin))) {
+  const host = request.headers.get("host");
+  if (!(await checkOriginAllowed(origin, host))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
   const adminCheck = verifyAdminRequest(request);
@@ -31,7 +31,8 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   const origin = getOrigin(request);
-  if (!(await checkOriginAllowed(origin))) {
+  const host = request.headers.get("host");
+  if (!(await checkOriginAllowed(origin, host))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
   const adminCheck = verifyAdminRequest(request);

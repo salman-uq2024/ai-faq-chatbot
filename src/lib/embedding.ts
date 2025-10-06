@@ -42,7 +42,7 @@ async function embedWithGemini(texts: string[], client: GoogleGenerativeAI): Pro
       if (embeddings?.length) {
         return embeddings.map((item) => item.values);
       }
-    } catch (error) {
+    } catch {
       console.warn(`Embedding model ${modelName} failed, trying next if available.`);
       continue;
     }

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isAllowedOrigin } from "@/lib/origin";
 import { z } from "zod";
 import { ingestSources } from "@/lib/ingest/pipeline";
 import { verifyAdminRequest } from "@/lib/admin-auth";
@@ -16,7 +15,8 @@ const ingestSchema = z.object({
 
 export async function POST(request: Request) {
   const origin = getOrigin(request);
-  if (!(await checkOriginAllowed(origin))) {
+  const host = request.headers.get("host");
+  if (!(await checkOriginAllowed(origin, host))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 

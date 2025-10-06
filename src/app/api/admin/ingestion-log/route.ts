@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { isAllowedOrigin } from "@/lib/origin";
 import { getIngestionLog } from "@/lib/storage";
 import { verifyAdminRequest } from "@/lib/admin-auth";
 import { checkOriginAllowed, enforceRateLimit, getOrigin } from "@/lib/security";
 
 export async function GET(request: Request) {
   const origin = getOrigin(request);
-  if (!(await checkOriginAllowed(origin))) {
+  const host = request.headers.get("host");
+  if (!(await checkOriginAllowed(origin, host))) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 

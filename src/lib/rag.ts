@@ -396,7 +396,7 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
       if (text && text.trim()) {
         return { answer: text, sources };
       }
-    } catch (err) {
+    } catch {
       // Try next model in sequence
       console.warn(`Model ${modelId} failed, trying next if available.`);
       continue;
