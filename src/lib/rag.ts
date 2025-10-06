@@ -1,75 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { embedTexts, cosineSimilarity } from "./embedding";
-import { buildSnippet, cleanText } from "./text";
+import { buildSnippet } from "./text";
 import { getChunks, getSettings } from "./storage";
-import type { QueryResult } from "./types";
+import type { Chunk, QueryResult } from "./types";
 
 const MAX_SOURCE_COUNT = 5;
-const MAX_FALLBACK_SENTENCES_PER_SOURCE = 2;
+const MIN_RELEVANCE_SCORE = 0.18;
 const SYSTEM_PROMPT =
   "You are a documentation assistant. Answer using only the provided sources and cite source numbers inline as [S1], [S2], etc.";
-
-const STOP_WORDS = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "that",
-  "from",
-  "your",
-  "about",
-  "into",
-  "when",
-  "have",
-  "this",
-  "will",
-  "what",
-  "does",
-  "then",
-  "been",
-  "make",
-  "sure",
-]);
-
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
-}
-
-function extractRelevantSentences(question: string, content: string): string[] {
-  const normalizedContent = cleanText(content);
-  if (!normalizedContent) {
-    return [];
-  }
-
-  const sentences = normalizedContent.split(/(?<=[.!?])\s+/).filter(Boolean);
-  if (!sentences.length) {
-    return [];
-  }
-
-  const queryTerms = tokenize(question);
-  const querySet = new Set(queryTerms);
-
-  const scored = sentences
-    .map((sentence) => {
-      const sentenceTokens = tokenize(sentence);
-      const overlap = sentenceTokens.reduce((total, token) => total + (querySet.has(token) ? 1 : 0), 0);
-      return { sentence: sentence.trim(), overlap };
-    })
-    .filter((item) => item.overlap > 0);
-
-  if (scored.length === 0) {
-    return sentences.slice(0, MAX_FALLBACK_SENTENCES_PER_SOURCE).map((sentence) => sentence.trim());
-  }
-
-  return scored
-    .sort((a, b) => b.overlap - a.overlap)
-    .slice(0, MAX_FALLBACK_SENTENCES_PER_SOURCE)
-    .map((item) => item.sentence);
-}
 
 let geminiClient: GoogleGenerativeAI | null = null;
 
@@ -84,6 +22,39 @@ function getGemini(): GoogleGenerativeAI | null {
   return geminiClient;
 }
 
+type RankedChunk = {
+  chunk: Chunk;
+  score: number;
+};
+
+function rankChunks(questionEmbedding: number[], chunks: Chunk[]): RankedChunk[] {
+  return chunks
+    .map((chunk) => ({
+      chunk,
+      score: cosineSimilarity(chunk.embedding, questionEmbedding),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_SOURCE_COUNT);
+}
+
+function filterRelevant(chunks: RankedChunk[]): RankedChunk[] {
+  return chunks.filter(({ score }) => Number.isFinite(score) && score >= MIN_RELEVANCE_SCORE);
+}
+
+function formatFallbackAnswer(question: string, ranked: RankedChunk[]): string {
+  if (ranked.length === 0) {
+    return "I couldn’t find anything in the current knowledge base about that question.";
+  }
+
+  const bulletPoints = ranked.map(({ chunk }, index) => {
+    const snippet = buildSnippet(chunk.content, 280);
+    const title = chunk.title ? `${chunk.title}: ` : "";
+    return `• ${title}${snippet} [S${index + 1}]`;
+  });
+
+  return `Here’s what I found related to “${question}”:\n\n${bulletPoints.join("\n\n")}`;
+}
+
 export async function runRagPipeline(question: string): Promise<QueryResult> {
   const chunks = await getChunks();
   if (chunks.length === 0) {
@@ -94,16 +65,18 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
   }
 
   const [questionEmbedding] = await embedTexts([question]);
-  const scored = chunks
-    .map((chunk) => ({
-      chunk,
-      score: cosineSimilarity(chunk.embedding, questionEmbedding),
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_SOURCE_COUNT);
+  const ranked = rankChunks(questionEmbedding, chunks);
+  const relevant = filterRelevant(ranked);
+
+  if (relevant.length === 0) {
+    return {
+      answer: "I couldn’t find information about that. Try rephrasing your question or ingesting more relevant content.",
+      sources: [],
+    };
+  }
 
   const settings = await getSettings();
-  const sources = scored.map(({ chunk, score }) => ({
+  const sources = relevant.map(({ chunk, score }) => ({
     id: chunk.id,
     title: chunk.title,
     url: chunk.sourceUrl,
@@ -114,30 +87,8 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
 
   if (!hasGemini) {
-    if (scored.length === 0) {
-      return {
-        answer: "I could not find relevant information.",
-        sources,
-      };
-    }
-
-    const fallbackSections = scored
-      .map(({ chunk }, index) => {
-        const sentences = extractRelevantSentences(question, chunk.content);
-        if (!sentences.length) {
-          return null;
-        }
-        const passage = sentences.join(" ");
-        return `• ${passage} [S${index + 1}]`;
-      })
-      .filter((section): section is string => Boolean(section));
-
-    const fallbackAnswer = fallbackSections.length
-      ? `Based on the stored knowledge, here are the most relevant details:\n\n${fallbackSections.join("\n\n")}`
-      : `Based on the stored knowledge, here is what I found: ${buildSnippet(scored[0].chunk.content, 320)}`;
-
     return {
-      answer: fallbackAnswer,
+      answer: formatFallbackAnswer(question, relevant),
       sources,
     };
   }
@@ -150,7 +101,7 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
     };
   }
 
-  const context = scored
+  const context = relevant
     .map(({ chunk }, index) => `Source ${index + 1}: ${chunk.title}\n${chunk.content}`)
     .join("\n\n");
 
@@ -186,14 +137,8 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
     };
   } catch (error) {
     console.error("LLM call failed", error);
-    const fallbackAnswer = scored.length
-      ? scored
-          .map(({ chunk }, index) => `Source ${index + 1}: ${buildSnippet(chunk.content, 320)}`)
-          .join("\n\n")
-      : "I could not find relevant information.";
-
     return {
-      answer: fallbackAnswer,
+      answer: formatFallbackAnswer(question, relevant),
       sources,
     };
   }
