@@ -7,6 +7,12 @@ import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import type { QueryResult } from "@/lib/types";
 
+const SAMPLE_QUESTIONS = [
+  "What is Retrieval-Augmented Generation (RAG)?",
+  "How does the AI FAQ Chatbot work?",
+  "What security features are included?",
+];
+
 export function DemoClient() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<QueryResult | null>(null);
@@ -27,11 +33,15 @@ export function DemoClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
       });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error("Query failed");
+        throw new Error(
+          data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string"
+            ? (data as { error: string }).error
+            : "Query failed",
+        );
       }
-      const data = await res.json();
-      setResponse(data);
+      setResponse(data as QueryResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -41,6 +51,23 @@ export function DemoClient() {
 
   return (
     <div className="space-y-6">
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Try a sample question</p>
+        <div className="flex flex-wrap gap-2">
+          {SAMPLE_QUESTIONS.map((sample) => (
+            <Button
+              key={sample}
+              type="button"
+              variant="ghost"
+              className="text-xs"
+              onClick={() => setQuestion(sample)}
+            >
+              {sample}
+            </Button>
+          ))}
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           type="text"
@@ -70,7 +97,15 @@ export function DemoClient() {
                 <ul className="space-y-1 text-sm">
                   {response.sources.map((source, index) => (
                     <li key={source.id} className="text-slate-600">
-                      [{index + 1}] {source.title} - {source.snippet}
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-blue-700 underline"
+                      >
+                        [{index + 1}] {source.title}
+                      </a>
+                      <div className="text-xs text-slate-500">{source.snippet}</div>
                     </li>
                   ))}
                 </ul>

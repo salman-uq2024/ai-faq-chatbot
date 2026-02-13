@@ -7,7 +7,11 @@ export type PdfDocument = {
   text: string;
 };
 
+const PDF_FETCH_TIMEOUT_MS = 20_000;
+
 export async function fetchPdf(url: string): Promise<PdfDocument | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PDF_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(url, {
       headers: {
@@ -15,10 +19,15 @@ export async function fetchPdf(url: string): Promise<PdfDocument | null> {
         Accept: "application/pdf",
       },
       cache: "no-store",
+      signal: controller.signal,
     });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch PDF ${url}: ${response.status}`);
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("pdf")) {
+      throw new Error(`Expected PDF content-type for ${url}, got ${contentType || "unknown"}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -38,6 +47,8 @@ export async function fetchPdf(url: string): Promise<PdfDocument | null> {
   } catch (error) {
     console.error(`Failed to fetch PDF ${url}`, error);
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

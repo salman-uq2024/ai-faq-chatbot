@@ -27,6 +27,18 @@ type IngestionLogResponse = {
   }>;
 };
 
+type KnowledgeBaseStatsResponse = {
+  chunkCount: number;
+  sourceCount: number;
+  totalTokens: number;
+  lastIngestedAt: string | null;
+  topSources: Array<{
+    url: string;
+    title: string;
+    chunkCount: number;
+  }>;
+};
+
 type IngestFormState = {
   baseUrl: string;
   pdfUrls: string;
@@ -54,15 +66,54 @@ function getStoredAdminToken(): string {
 
 const AUTH_ERRORS = ["invalid admin token", "missing or invalid admin token", "unauthorized"] as const;
 
+function extractErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+
+  const maybePayload = payload as {
+    error?: unknown;
+  };
+
+  if (typeof maybePayload.error === "string") {
+    return maybePayload.error;
+  }
+
+  if (maybePayload.error && typeof maybePayload.error === "object") {
+    const errorObject = maybePayload.error as {
+      formErrors?: unknown;
+      fieldErrors?: Record<string, unknown>;
+    };
+    if (Array.isArray(errorObject.formErrors) && errorObject.formErrors.length > 0) {
+      return String(errorObject.formErrors[0]);
+    }
+    if (errorObject.fieldErrors && typeof errorObject.fieldErrors === "object") {
+      const firstField = Object.values(errorObject.fieldErrors).find(
+        (value) => Array.isArray(value) && value.length > 0,
+      );
+      if (Array.isArray(firstField) && firstField.length > 0) {
+        return String(firstField[0]);
+      }
+    }
+  }
+
+  return fallback;
+}
+
 export default function AdminPage() {
   const {
     data: settings,
     mutate: mutateSettings,
-    error: settingsError,
+    error: settingsFetchError,
   } = useSWR<SettingsResponse>("/api/admin/settings");
   const { data: log, mutate: mutateLog, error: logError } = useSWR<IngestionLogResponse>(
     "/api/admin/ingestion-log",
   );
+  const {
+    data: stats,
+    mutate: mutateStats,
+    error: statsError,
+  } = useSWR<KnowledgeBaseStatsResponse>("/api/admin/stats");
 
   const [form, setForm] = useState<IngestFormState>(DEFAULT_FORM);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -76,6 +127,11 @@ export default function AdminPage() {
   const [tokenInput, setTokenInput] = useState("");
   const [tokenStatus, setTokenStatus] = useState<null | "saved" | "cleared" | "error">(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [clearingKnowledge, setClearingKnowledge] = useState(false);
+  const [knowledgeMessage, setKnowledgeMessage] = useState<string | null>(null);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -96,15 +152,16 @@ export default function AdminPage() {
   const logEntries = log?.entries ?? [];
 
   const primaryOrigin = useMemo(() => settings?.allowOrigins?.[0] ?? "http://localhost:3000", [settings]);
+  const topSources = stats?.topSources ?? [];
 
   const hasAuthError = useMemo(() => {
-    const lowerMessages = [settingsError?.message, logError?.message]
+    const lowerMessages = [settingsFetchError?.message, logError?.message, statsError?.message]
       .filter(Boolean)
       .map((message) => message!.toLowerCase());
     return lowerMessages.some((message) =>
       AUTH_ERRORS.some((authError) => message.includes(authError)),
     );
-  }, [settingsError, logError]);
+  }, [settingsFetchError, logError, statsError]);
 
   const applyAdminHeaders = (): Record<string, string> => {
     const token = getStoredAdminToken();
@@ -148,6 +205,8 @@ export default function AdminPage() {
   const handleUpdateSettings = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSavingSettings(true);
+    setSettingsMessage(null);
+    setSettingsError(null);
     try {
       const origins = allowOrigins
         .split(/\s+/)
@@ -168,12 +227,13 @@ export default function AdminPage() {
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error ? JSON.stringify(payload.error) : response.statusText);
+        throw new Error(extractErrorMessage(payload, response.statusText));
       }
       mutateSettings(payload, { revalidate: false });
+      mutateStats();
+      setSettingsMessage("Settings saved.");
     } catch (error) {
-      setTokenStatus("error");
-      setTokenError(error instanceof Error ? error.message : "Failed to update settings.");
+      setSettingsError(error instanceof Error ? error.message : "Failed to update settings.");
     } finally {
       setSavingSettings(false);
     }
@@ -184,6 +244,8 @@ export default function AdminPage() {
     setIngesting(true);
     setIngestMessage(null);
     setIngestError(null);
+    setKnowledgeMessage(null);
+    setKnowledgeError(null);
     try {
       const payload = {
         baseUrl: form.baseUrl || undefined,
@@ -211,14 +273,49 @@ export default function AdminPage() {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error ? JSON.stringify(data.error) : response.statusText);
+        throw new Error(extractErrorMessage(data, response.statusText));
       }
       setIngestMessage(`Ingested ${data.result.documents} documents and ${data.result.chunks} chunks.`);
       mutateLog();
+      mutateStats();
     } catch (error) {
       setIngestError(error instanceof Error ? error.message : "Ingestion failed.");
     } finally {
       setIngesting(false);
+    }
+  };
+
+  const handleClearKnowledgeBase = async () => {
+    const confirmed = window.confirm(
+      "Clear all ingested chunks and ingestion logs? This cannot be undone.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setClearingKnowledge(true);
+    setKnowledgeMessage(null);
+    setKnowledgeError(null);
+    setIngestMessage(null);
+    setIngestError(null);
+    try {
+      const response = await fetch("/api/admin/stats", {
+        method: "DELETE",
+        headers: {
+          ...applyAdminHeaders(),
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(payload, response.statusText));
+      }
+      setKnowledgeMessage("Knowledge base cleared.");
+      mutateLog({ entries: [] }, { revalidate: false });
+      mutateStats(payload?.stats ?? undefined, { revalidate: false });
+    } catch (error) {
+      setKnowledgeError(error instanceof Error ? error.message : "Failed to clear the knowledge base.");
+    } finally {
+      setClearingKnowledge(false);
     }
   };
 
@@ -376,6 +473,8 @@ export default function AdminPage() {
 
             {ingestMessage && <Alert variant="success">{ingestMessage}</Alert>}
             {ingestError && <Alert variant="error">{ingestError}</Alert>}
+            {knowledgeMessage && <Alert variant="success">{knowledgeMessage}</Alert>}
+            {knowledgeError && <Alert variant="error">{knowledgeError}</Alert>}
 
             <div className="flex justify-end">
               <Button type="submit" loading={ingesting}>
@@ -386,6 +485,53 @@ export default function AdminPage() {
         </Card>
 
         <div className="space-y-6">
+          <Card header="Knowledge base status">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Chunks</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{stats?.chunkCount ?? "..."}</div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Sources</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{stats?.sourceCount ?? "..."}</div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Estimated tokens</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {stats?.totalTokens?.toLocaleString() ?? "..."}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Last ingestion</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {stats?.lastIngestedAt ? new Date(stats.lastIngestedAt).toLocaleString() : "Never"}
+                </div>
+              </div>
+            </div>
+            {topSources.length > 0 && (
+              <div className="space-y-2 text-xs">
+                <p className="font-semibold uppercase tracking-[0.14em] text-slate-500">Top sources</p>
+                {topSources.map((source) => (
+                  <div key={source.url} className="rounded-lg border border-slate-200 px-3 py-2">
+                    <div className="font-medium text-slate-900">{source.title}</div>
+                    <div className="mt-1 truncate text-slate-500">{source.url}</div>
+                    <div className="mt-1 text-slate-500">{source.chunkCount} chunks</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {statsError && !hasAuthError && <Alert variant="error">{statsError.message}</Alert>}
+            <Button
+              type="button"
+              variant="secondary"
+              loading={clearingKnowledge}
+              className="w-full"
+              onClick={handleClearKnowledgeBase}
+            >
+              {clearingKnowledge ? "Clearing knowledge base" : "Clear knowledge base"}
+            </Button>
+          </Card>
+
           <Card header="Model & branding">
             <form className="space-y-3" onSubmit={handleUpdateSettings}>
               <div className="space-y-1">
@@ -404,7 +550,15 @@ export default function AdminPage() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Brand color</label>
-                <Input value={brandColor} onChange={(event) => setBrandColor(event.target.value)} />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="color"
+                    value={brandColor}
+                    onChange={(event) => setBrandColor(event.target.value)}
+                    className="h-10 w-14 rounded-md p-1"
+                  />
+                  <Input value={brandColor} onChange={(event) => setBrandColor(event.target.value)} />
+                </div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500">Origin allowlist</label>
@@ -418,6 +572,8 @@ export default function AdminPage() {
               <Button type="submit" loading={savingSettings} className="w-full">
                 Save settings
               </Button>
+              {settingsMessage && <Alert variant="success">{settingsMessage}</Alert>}
+              {settingsError && <Alert variant="error">{settingsError}</Alert>}
             </form>
           </Card>
 

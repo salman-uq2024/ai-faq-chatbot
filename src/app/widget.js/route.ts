@@ -10,21 +10,36 @@ export async function GET() {
     window.__aiFaqWidgetLoaded = true;
     const scriptEl = document.currentScript;
     if (!scriptEl) return;
-    const appOrigin = new URL(scriptEl.src).origin;
+    const appOrigin = new URL(scriptEl.src, window.location.href).origin;
     const apiUrlAttr = scriptEl.dataset.apiUrl;
     const brandAttr = scriptEl.dataset.brandColor;
     const buttonTextAttr = scriptEl.dataset.buttonText;
-    let API_URL = appOrigin + '/api/query';
-    if (apiUrlAttr) {
+    const titleAttr = scriptEl.dataset.title;
+    const placeholderAttr = scriptEl.dataset.placeholder;
+
+    function resolveUrl(input, fallback) {
+      if (!input) return fallback;
       try {
-        API_URL = new URL(apiUrlAttr, appOrigin).toString();
+        return new URL(input, appOrigin).toString();
       } catch (error) {
-        console.warn('ai-faq-widget: invalid data-api-url provided, using raw value');
-        API_URL = apiUrlAttr;
+        console.warn('ai-faq-widget: invalid data-api-url provided, using fallback');
+        return fallback;
       }
     }
-    const BRAND = brandAttr || ${defaultBrand};
+
+    function sanitizeColor(input, fallback) {
+      if (!input) return fallback;
+      const probe = document.createElement('span');
+      probe.style.color = '';
+      probe.style.color = input;
+      return probe.style.color ? input : fallback;
+    }
+
+    const API_URL = resolveUrl(apiUrlAttr, appOrigin + '/api/query');
+    const BRAND = sanitizeColor(brandAttr, ${defaultBrand});
     const BUTTON_TEXT = buttonTextAttr || 'Ask our AI';
+    const TITLE_TEXT = titleAttr || 'Need help?';
+    const PLACEHOLDER_TEXT = placeholderAttr || 'Ask a question...';
 
     const style = document.createElement('style');
     style.textContent = [
@@ -41,6 +56,10 @@ export async function GET() {
       '  cursor: pointer;',
       '  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);',
       '  z-index: 9999;',
+      '  transition: transform 0.15s ease, opacity 0.2s ease;',
+      '}',
+      '.ai-faq-button:hover {',
+      '  transform: translateY(-1px);',
       '}',
       '.ai-faq-modal-backdrop {',
       '  position: fixed;',
@@ -56,7 +75,7 @@ export async function GET() {
       '  background: white;',
       '  width: min(420px, 90vw);',
       '  border-radius: 16px;',
-      '  padding: 20px;',
+      '  padding: 16px;',
       '  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);',
       '  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;',
       '  box-sizing: border-box;',
@@ -66,9 +85,30 @@ export async function GET() {
       '  max-height: 85vh;',
       '  overflow: auto;',
       '}',
+      '.ai-faq-modal-header {',
+      '  display: flex;',
+      '  align-items: center;',
+      '  justify-content: space-between;',
+      '  gap: 8px;',
+      '}',
       '.ai-faq-modal h2 {',
-      '  margin: 0 0 12px;',
+      '  margin: 0;',
+      '  font-size: 18px;',
+      '  line-height: 1.35;',
+      '}',
+      '.ai-faq-close {',
+      '  border: none;',
+      '  background: transparent;',
+      '  color: #334155;',
+      '  width: 30px;',
+      '  height: 30px;',
+      '  border-radius: 8px;',
+      '  cursor: pointer;',
       '  font-size: 20px;',
+      '  line-height: 1;',
+      '}',
+      '.ai-faq-close:hover {',
+      '  background: #f1f5f9;',
       '}',
       '.ai-faq-modal form {',
       '  display: flex;',
@@ -95,14 +135,23 @@ export async function GET() {
       '  cursor: pointer;',
       '  font-size: 15px;',
       '}',
+      '.ai-faq-modal button[type=submit]:disabled {',
+      '  opacity: 0.7;',
+      '  cursor: wait;',
+      '}',
       '.ai-faq-response {',
-      '  margin-top: 8px;',
+      '  margin-top: 4px;',
       '  white-space: pre-wrap;',
       '  font-size: 14px;',
       '  line-height: 1.6;',
       '  overflow-wrap: anywhere;',
       '  max-height: 40vh;',
       '  overflow-y: auto;',
+      '}',
+      '.ai-faq-hint {',
+      '  margin: 0;',
+      '  font-size: 12px;',
+      '  color: #64748b;',
       '}',
       '.ai-faq-sources {',
       '  margin-top: 8px;',
@@ -118,38 +167,50 @@ export async function GET() {
       '  text-decoration: underline;',
       '}',
     ].join(String.fromCharCode(10));
-    document.head.appendChild(style);
 
     const button = document.createElement('button');
     button.className = 'ai-faq-button';
     button.textContent = BUTTON_TEXT;
+    button.type = 'button';
+    button.setAttribute('aria-label', BUTTON_TEXT);
 
     const backdrop = document.createElement('div');
     backdrop.className = 'ai-faq-modal-backdrop';
 
     const modal = document.createElement('div');
     modal.className = 'ai-faq-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'ai-faq-modal-title');
     modal.innerHTML = [
-      '<h2>Need help?</h2>',
+      '<div class="ai-faq-modal-header">',
+      '<h2 id="ai-faq-modal-title"></h2>',
+      '<button type="button" class="ai-faq-close" aria-label="Close widget">&times;</button>',
+      '</div>',
       '<form>',
-      '<textarea placeholder="Ask a question..." required></textarea>',
+      '<textarea required></textarea>',
       '<button type="submit">Send</button>',
       '</form>',
-      '<div class="ai-faq-response"></div>',
+      '<p class="ai-faq-hint">Press Esc to close.</p>',
+      '<div class="ai-faq-response" aria-live="polite"></div>',
       '<div class="ai-faq-sources"></div>',
     ].join('');
     backdrop.appendChild(modal);
 
+    const titleEl = modal.querySelector('h2');
+    const closeButton = modal.querySelector('.ai-faq-close');
     function openModal() {
       backdrop.style.display = 'flex';
       button.style.display = 'none';
       try { document.body.style.overflow = 'hidden'; } catch (e) {}
+      if (textarea) textarea.focus();
     }
 
     function closeModal() {
       backdrop.style.display = 'none';
       button.style.display = 'block';
       try { document.body.style.overflow = ''; } catch (e) {}
+      button.focus();
     }
 
     backdrop.addEventListener('click', (event) => {
@@ -160,16 +221,22 @@ export async function GET() {
 
     const form = modal.querySelector('form');
     const textarea = modal.querySelector('textarea');
+    const submitButton = modal.querySelector('button[type="submit"]');
     const responseEl = modal.querySelector('.ai-faq-response');
     const sourcesEl = modal.querySelector('.ai-faq-sources');
+    if (titleEl) titleEl.textContent = TITLE_TEXT;
+    if (textarea) textarea.placeholder = PLACEHOLDER_TEXT;
 
     async function submitQuestion(event) {
       event.preventDefault();
-      if (!textarea || !responseEl || !sourcesEl) return;
+      if (!textarea || !responseEl || !sourcesEl || !submitButton) return;
       const question = textarea.value.trim();
       if (!question) return;
       responseEl.textContent = 'Thinking...';
       sourcesEl.textContent = '';
+      textarea.disabled = true;
+      submitButton.disabled = true;
+      submitButton.textContent = 'Sending...';
 
       try {
         const res = await fetch(API_URL, {
@@ -177,18 +244,18 @@ export async function GET() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.error || 'Request failed');
+          throw new Error(typeof data.error === 'string' ? data.error : 'Request failed');
         }
-        responseEl.textContent = data.answer;
+        responseEl.textContent = typeof data.answer === 'string' ? data.answer : 'No answer was returned.';
         if (Array.isArray(data.sources) && data.sources.length) {
           const list = document.createElement('ul');
           data.sources.forEach((source) => {
             const item = document.createElement('li');
             const link = document.createElement('a');
-            link.href = source.url;
-            link.textContent = source.title || source.url;
+            link.href = source.url || '#';
+            link.textContent = source.title || source.url || 'Source';
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
             item.appendChild(link);
@@ -200,17 +267,47 @@ export async function GET() {
           sourcesEl.textContent = '';
         }
       } catch (error) {
-        responseEl.textContent = 'An error occurred. Please try again later.';
+        const message = error instanceof Error ? error.message : 'An error occurred. Please try again later.';
+        responseEl.textContent = message;
+      } finally {
+        textarea.disabled = false;
+        submitButton.disabled = false;
+        submitButton.textContent = 'Send';
       }
     }
 
     if (form) {
       form.addEventListener('submit', submitQuestion);
     }
+    if (closeButton) {
+      closeButton.addEventListener('click', closeModal);
+    }
 
-    document.body.appendChild(button);
-    document.body.appendChild(backdrop);
-    button.addEventListener('click', openModal);
+    function onKeyDown(event) {
+      if (event.key === 'Escape' && backdrop.style.display === 'flex') {
+        closeModal();
+      }
+    }
+
+    function mount() {
+      if (!document.head.contains(style)) {
+        document.head.appendChild(style);
+      }
+      if (!document.body.contains(button)) {
+        document.body.appendChild(button);
+      }
+      if (!document.body.contains(backdrop)) {
+        document.body.appendChild(backdrop);
+      }
+      button.addEventListener('click', openModal);
+      document.addEventListener('keydown', onKeyDown);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', mount, { once: true });
+    } else {
+      mount();
+    }
   })();`;
 
   return new NextResponse(script, {

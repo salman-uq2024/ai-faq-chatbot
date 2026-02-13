@@ -90,6 +90,18 @@ type IngestionLogShape = {
   entries: IngestionLogEntry[];
 };
 
+export type KnowledgeBaseStats = {
+  chunkCount: number;
+  sourceCount: number;
+  totalTokens: number;
+  lastIngestedAt: string | null;
+  topSources: Array<{
+    url: string;
+    title: string;
+    chunkCount: number;
+  }>;
+};
+
 const defaultSettings: AppSettings = {
   model: "models/gemini-2.0-flash",
   maxTokens: 512,
@@ -134,6 +146,20 @@ export async function replaceChunksForOrigin(origin: string, chunks: Chunk[]) {
   });
 }
 
+export async function replaceChunksForSources(sourceUrls: string[], incomingChunks: Chunk[]) {
+  const normalizedSources = new Set(sourceUrls.map((url) => url.trim()).filter(Boolean));
+  await mutex.runExclusive(async () => {
+    await ensureFile<ChunkStoreShape>(chunksFile, { version: 1, chunks: [] });
+    const data = await readJsonFile<ChunkStoreShape>(chunksFile);
+    const preserved = data.chunks.filter((chunk) => !normalizedSources.has(chunk.sourceUrl));
+    const updated: ChunkStoreShape = {
+      version: 1,
+      chunks: [...preserved, ...incomingChunks],
+    };
+    await writeJsonFile(chunksFile, updated);
+  });
+}
+
 export async function addChunks(chunks: Chunk[]) {
   await mutex.runExclusive(async () => {
     await ensureFile<ChunkStoreShape>(chunksFile, { version: 1, chunks: [] });
@@ -148,6 +174,7 @@ export async function addChunks(chunks: Chunk[]) {
 
 export async function clearChunks() {
   await mutex.runExclusive(async () => {
+    await ensureDir();
     await writeJsonFile(chunksFile, { version: 1, chunks: [] as Chunk[] });
   });
 }
@@ -192,5 +219,51 @@ export async function getIngestionLog(): Promise<IngestionLogEntry[]> {
     await ensureFile<IngestionLogShape>(ingestionLogFile, { version: 1, entries: [] });
     const data = await readJsonFile<IngestionLogShape>(ingestionLogFile);
     return data.entries;
+  });
+}
+
+export async function clearIngestionLog() {
+  await mutex.runExclusive(async () => {
+    await ensureDir();
+    await writeJsonFile(ingestionLogFile, { version: 1, entries: [] as IngestionLogEntry[] });
+  });
+}
+
+export async function getKnowledgeBaseStats(): Promise<KnowledgeBaseStats> {
+  return mutex.runExclusive(async () => {
+    await ensureFile<ChunkStoreShape>(chunksFile, { version: 1, chunks: [] });
+    await ensureFile<IngestionLogShape>(ingestionLogFile, { version: 1, entries: [] });
+
+    const chunkData = await readJsonFile<ChunkStoreShape>(chunksFile);
+    const logData = await readJsonFile<IngestionLogShape>(ingestionLogFile);
+
+    const sourceMap = new Map<string, { title: string; chunkCount: number }>();
+    let totalTokens = 0;
+    for (const chunk of chunkData.chunks) {
+      totalTokens += chunk.tokens;
+      const existing = sourceMap.get(chunk.sourceUrl);
+      if (existing) {
+        existing.chunkCount += 1;
+      } else {
+        sourceMap.set(chunk.sourceUrl, { title: chunk.title, chunkCount: 1 });
+      }
+    }
+
+    const topSources = [...sourceMap.entries()]
+      .map(([url, value]) => ({
+        url,
+        title: value.title,
+        chunkCount: value.chunkCount,
+      }))
+      .sort((a, b) => b.chunkCount - a.chunkCount)
+      .slice(0, 5);
+
+    return {
+      chunkCount: chunkData.chunks.length,
+      sourceCount: sourceMap.size,
+      totalTokens,
+      lastIngestedAt: logData.entries[0]?.createdAt ?? null,
+      topSources,
+    };
   });
 }

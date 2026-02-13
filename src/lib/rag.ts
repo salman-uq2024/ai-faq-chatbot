@@ -6,6 +6,7 @@ import type { Chunk, QueryResult } from "./types";
 
 const MAX_SOURCE_COUNT = 5;
 const MIN_RELEVANCE_SCORE = 0.12;
+const MIN_SEMANTIC_SCORE_WITHOUT_KEYWORD_MATCH = 0.22;
 const MAX_BULLETS = 2;
 const SYSTEM_PROMPT =
   "You are a documentation assistant. Answer using only the provided sources and cite source numbers inline as [S1], [S2], etc.";
@@ -195,7 +196,7 @@ function topicSynonymTokens(topic: string): string[] {
   // Special handling for "next js" variants
   const joined = base.join(" ");
   if (/^next\s*\.?\s*js$/.test(joined) || base.includes("nextjs")) {
-    return ["next", "js", "nextjs", "nextjs"]; // include variants
+    return ["next", "js", "nextjs"]; // include variants
   }
   return base;
 }
@@ -341,10 +342,14 @@ export async function runRagPipeline(question: string): Promise<QueryResult> {
   // Support very simple multi-question input: split on '?' and answer up to two.
   const rawParts = question.split(/[?]/).map((s) => s.trim()).filter((s) => s.length > 0);
   const parts = rawParts.length > 1 ? rawParts.slice(0, 2) : [question];
+  const primaryQuestion = parts[0];
 
-  const [questionEmbedding] = await embedTexts([parts[0]]);
-  const ranked = rankChunks(parts[0], questionEmbedding, chunks);
-  const filtered = filterRelevant(ranked).filter(({ chunk }) => lexicalOverlap(question, chunk.content) > 0);
+  const [questionEmbedding] = await embedTexts([primaryQuestion]);
+  const ranked = rankChunks(primaryQuestion, questionEmbedding, chunks);
+  const filtered = filterRelevant(ranked).filter(({ chunk, score }) => {
+    const overlap = lexicalOverlap(primaryQuestion, chunk.content);
+    return overlap > 0 || score >= MIN_SEMANTIC_SCORE_WITHOUT_KEYWORD_MATCH;
+  });
   const relevant = dedupeBySource(filtered);
 
   if (relevant.length === 0) {

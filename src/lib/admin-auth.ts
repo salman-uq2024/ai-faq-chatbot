@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "crypto";
+
 const ADMIN_BEARER_PREFIX = "Bearer ";
 
 export type AdminAuthResult = {
@@ -26,7 +28,14 @@ export function verifyAdminRequest(request: Request): AdminAuthResult {
   }
 
   const provided = header.slice(ADMIN_BEARER_PREFIX.length).trim();
-  if (provided !== expected) {
+
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+  const isMatch =
+    expectedBuffer.length === providedBuffer.length &&
+    timingSafeEqual(expectedBuffer, providedBuffer);
+
+  if (!isMatch) {
     return { success: false, error: "Invalid admin token" };
   }
 

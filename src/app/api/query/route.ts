@@ -11,7 +11,8 @@ function withCors(response: NextResponse, origin: string | null) {
   // For opaque origins (e.g., file:// → "null") or missing origin, return wildcard
   if (origin && origin !== "null") {
     response.headers.set("Access-Control-Allow-Origin", origin);
-    response.headers.set("Vary", "Origin");
+    const vary = response.headers.get("Vary");
+    response.headers.set("Vary", vary ? `${vary}, Origin` : "Origin");
   } else {
     response.headers.set("Access-Control-Allow-Origin", "*");
   }
@@ -23,6 +24,24 @@ function withCors(response: NextResponse, origin: string | null) {
   return response;
 }
 
+function withSecurityHeaders(response: NextResponse) {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return response;
+}
+
+function withRateLimitHeaders(
+  response: NextResponse,
+  rateLimit: { remaining: number; resetAt: number } | null,
+) {
+  if (!rateLimit) {
+    return response;
+  }
+  response.headers.set("X-RateLimit-Remaining", String(Math.max(0, rateLimit.remaining)));
+  response.headers.set("X-RateLimit-Reset", String(Math.floor(rateLimit.resetAt / 1000)));
+  return response;
+}
+
 export async function OPTIONS(request: Request) {
   const origin = getOrigin(request);
   const host = request.headers.get("host");
@@ -30,12 +49,10 @@ export async function OPTIONS(request: Request) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 
-  return withCors(new NextResponse(null, { status: 204 }), origin);
+  return withSecurityHeaders(withCors(new NextResponse(null, { status: 204 }), origin));
 }
 
-const querySchema = z.object({
-  question: z.string().min(1),
-});
+const querySchema = z.object({ question: z.string().trim().min(1) });
 
 export async function POST(request: Request) {
   const origin = getOrigin(request);
@@ -45,20 +62,33 @@ export async function POST(request: Request) {
   }
 
   const jsonWithCors = (payload: unknown, init?: ResponseInit) =>
-    withCors(NextResponse.json(payload, init), origin);
+    withSecurityHeaders(withCors(NextResponse.json(payload, init), origin));
 
   const rate = await enforceRateLimit(request);
   if (!rate.success) {
-    return jsonWithCors({ error: "Rate limit exceeded" }, { status: 429 });
+    const response = jsonWithCors({ error: "Rate limit exceeded" }, { status: 429 });
+    response.headers.set(
+      "Retry-After",
+      String(Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1000))),
+    );
+    return withRateLimitHeaders(response, rate);
   }
 
   const payload = await request.json().catch(() => null);
   const parsed = querySchema.safeParse(payload);
 
   if (!parsed.success) {
-    return jsonWithCors({ error: parsed.error.flatten() }, { status: 400 });
+    return withRateLimitHeaders(jsonWithCors({ error: parsed.error.flatten() }, { status: 400 }), rate);
   }
 
-  const result = await runRagPipeline(parsed.data.question);
-  return jsonWithCors(result);
+  try {
+    const result = await runRagPipeline(parsed.data.question);
+    return withRateLimitHeaders(jsonWithCors(result), rate);
+  } catch (error) {
+    console.error("Query pipeline failed", error);
+    return withRateLimitHeaders(
+      jsonWithCors({ error: "Unable to process the question right now." }, { status: 500 }),
+      rate,
+    );
+  }
 }

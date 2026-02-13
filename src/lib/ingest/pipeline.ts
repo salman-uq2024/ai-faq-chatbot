@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { embedTexts } from "../embedding";
-import { appendIngestionLog, replaceChunksForOrigin } from "../storage";
+import { appendIngestionLog, replaceChunksForSources } from "../storage";
 import type { Chunk, SourceIngestRequest } from "../types";
 import { chunkText, estimateTokens } from "../text";
 import { crawlSite } from "./crawl";
@@ -15,14 +15,6 @@ type DocumentRecord = {
 const DEFAULT_CHUNK_SIZE = 320;
 const DEFAULT_CHUNK_OVERLAP = 60;
 const EMBEDDING_BATCH_SIZE = 16;
-
-function getOrigin(url: string): string {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return url;
-  }
-}
 
 async function embedInBatches(texts: string[]): Promise<number[][]> {
   const embeddings: number[][] = [];
@@ -97,18 +89,8 @@ export async function ingestSources(request: SourceIngestRequest) {
     throw new Error("Processed documents did not produce any chunks");
   }
 
-  const chunksByOrigin = new Map<string, Chunk[]>();
-
-  for (const chunk of chunkEntries) {
-    const origin = getOrigin(chunk.sourceUrl);
-    const grouped = chunksByOrigin.get(origin) ?? [];
-    grouped.push(chunk);
-    chunksByOrigin.set(origin, grouped);
-  }
-
-  for (const [origin, chunks] of chunksByOrigin) {
-    await replaceChunksForOrigin(origin, chunks);
-  }
+  const sourceUrls = Array.from(new Set(documents.map((document) => document.url)));
+  await replaceChunksForSources(sourceUrls, chunkEntries);
 
   await appendIngestionLog({
     summary: `Ingested ${documents.length} documents and ${chunkEntries.length} chunks`,

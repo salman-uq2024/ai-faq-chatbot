@@ -29,6 +29,7 @@ AI-Powered FAQ Chatbot: Ingest documents via RAG, query intelligently, with admi
 - **Secure document ingestion**: Parse PDFs and crawl websites to build a knowledge base securely.
 - **Intelligent querying**: Use embeddings and Retrieval-Augmented Generation (RAG) for accurate, context-aware responses.
 - **Admin panel**: Manage ingestion, view logs, and configure settings via an intuitive dashboard.
+- **Knowledge base controls**: View chunk/source/token stats and clear stored data from the admin dashboard.
 - **Embeddable JavaScript widget**: Easily integrate the chatbot into any website with a lightweight script.
 - **Production-ready**: Built with TypeScript, Tailwind CSS, and Playwright end-to-end tests for reliability.
 
@@ -79,7 +80,7 @@ For full installation details, see [docs/install.md](docs/install.md).
 
 ## Demo
 
-**Live Demo**: [TBD - Deployed on Vercel](https://ai-faq-chatbot.vercel.app)
+**Live Demo**: [https://ai-faq-chatbot.vercel.app](https://ai-faq-chatbot.vercel.app)
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/salman/ai-faq-chatbot&env=GEMINI_API_KEY,ADMIN_TOKEN,RATE_LIMIT_PER_MINUTE,STORAGE_DIR&envDescription=Set%20required%20environment%20variables%20for%20production%20usage.)
 
@@ -91,6 +92,8 @@ Add this script to your website's `<head>` or `<body>`:
 <script src="https://yourdomain.com/widget.js"
         data-api-url="https://yourdomain.com/api/query"
         data-button-text="Need help?"
+        data-title="Support assistant"
+        data-placeholder="Ask us anything..."
         data-brand-color="#2563EB"
         async></script>
 ```

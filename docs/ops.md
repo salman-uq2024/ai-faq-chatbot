@@ -12,6 +12,7 @@ The app uses Next.js App Router for server-side rendering and API routes.
 
 Key files:
 - API routes: [src/app/api/query/route.ts](../src/app/api/query/route.ts) for queries, [src/app/api/admin/ingest/route.ts](../src/app/api/admin/ingest/route.ts) for ingestion.
+- Admin stats/reset route: [src/app/api/admin/stats/route.ts](../src/app/api/admin/stats/route.ts) for chunk/source metrics and clearing ingested data.
 - RAG pipeline: [src/lib/rag.ts](../src/lib/rag.ts).
 
 ## Environment Variables
@@ -44,6 +45,7 @@ Ingestion processes content (web crawls/PDFs) into vectors for RAG.
   - For large datasets, scale by queuing jobs (e.g., Vercel Cron) or using external services.
 
 View recent jobs in admin dashboard.
+Use the "Knowledge base status" card to monitor chunk counts and clear data when you need a clean re-ingest.
 
 ## Query Handling and Monitoring
 
