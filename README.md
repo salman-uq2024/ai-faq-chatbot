@@ -5,7 +5,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org)
 
-A full-stack retrieval-augmented generation application that ingests website and PDF content, retrieves relevant evidence, produces cited answers, and exposes both an admin dashboard and an embeddable support widget.
+A personal full-stack retrieval-augmented generation prototype that ingests website and PDF content, retrieves relevant evidence, produces cited answers, and exposes both an admin dashboard and an embeddable support widget.
 
 ![Verified local landing page](public/evidence/landing.png)
 
@@ -54,7 +54,7 @@ git clone https://github.com/salman-chowdhury/ai-faq-chatbot.git
 cd ai-faq-chatbot
 npm ci
 cp .env.example .env.local
-npm run dev
+npm run dev -- --hostname 127.0.0.1
 ```
 
 Open `http://localhost:3000` for the public experience and `http://localhost:3000/admin` for ingestion and administration.
@@ -66,7 +66,7 @@ Open `http://localhost:3000` for the public experience and `http://localhost:300
 - `STORAGE_DIR` — optional persistent-data path
 - `RATE_LIMIT_PER_MINUTE` — request-rate override
 
-Without `GEMINI_API_KEY`, the project remains usable in deterministic offline-demo mode.
+Without `GEMINI_API_KEY`, the project remains usable in deterministic offline-demo mode. With no `ADMIN_TOKEN`, admin APIs are open for local review; configure a strong token before exposing the app publicly.
 
 ## Live demo
 
@@ -127,6 +127,13 @@ npm run eval:run -- http://127.0.0.1:3102
 ```
 
 The committed [sample report](evaluation/reports/v1/report.md) records 8 measured cases: mean Precision@5 `0.7083`, Recall@5 `0.875`, reciprocal rank `0.875`, citation coverage `0.875`, grounding overlap `0.6119`, refusal correctness `1.0`, local p50 `3.83 ms`, and p95 `15.06 ms`. Provider token usage and cost were unavailable in deterministic fallback mode and are reported as unobserved rather than estimated.
+
+## Reviewer entry points
+
+- [RAG pipeline](src/lib/rag.ts) and [query route](src/app/api/query/route.ts): follow a request through retrieval and answer generation.
+- [Playwright tests](tests/e2e/basic.spec.ts): inspect the actual browser checks.
+- [Evaluation cases](evaluation/datasets/v1/cases.json): inspect stale, conflicting, unanswerable and injected evidence.
+- [Recorded results and limitations](docs/case-study.md): the reported millisecond latency is local fallback timing, not Gemini inference latency or a production service-level objective.
 
 ## Current limitations
 
